@@ -6,7 +6,6 @@ https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/spe
 */
 package server
 
-import "core:log"
 import "core:odin/ast"
 import "core:odin/tokenizer"
 import "core:unicode/utf8"
@@ -249,12 +248,12 @@ visit_node :: proc(node: ^ast.Node, builder: ^SemanticTokenBuilder) {
 		visit_node(n.row_index, builder)
 		visit_node(n.column_index, builder)
 	case ^ast.Poly_Type:
-		write_semantic_node(builder, n.type, .TypeParameter, { .Declaration })
+		write_semantic_node(builder, n.type, .TypeParameter, {.Declaration})
 		visit_node(n.specialization, builder)
 	case ^ast.Range_Stmt:
 		for val in n.vals {
-			if ident, ok := val.derived.(^ast.Ident); ok {
-				write_semantic_node(builder, val, .Variable)
+			if ident, ok := unwrap_ident(val); ok {
+				write_semantic_node(builder, ident, .Variable, {.Declaration})
 			}
 		}
 
@@ -274,8 +273,16 @@ visit_node :: proc(node: ^ast.Node, builder: ^SemanticTokenBuilder) {
 		visit_node(n.post, builder)
 		visit_node(n.body, builder)
 	case ^ast.Unroll_Range_Stmt:
-		visit_node(n.val0, builder)
-		visit_node(n.val1, builder)
+		if n.val0 != nil {
+			if ident, ok := unwrap_ident(n.val0); ok {
+				write_semantic_node(builder, ident, .Variable, {.Declaration})
+			}
+		}
+		if n.val1 != nil {
+			if ident, ok := unwrap_ident(n.val1); ok {
+				write_semantic_node(builder, ident, .Variable, {.Declaration})
+			}
+		}
 		visit_node(n.expr, builder)
 		visit_node(n.body, builder)
 	case ^ast.Switch_Stmt:
@@ -283,7 +290,16 @@ visit_node :: proc(node: ^ast.Node, builder: ^SemanticTokenBuilder) {
 		visit_node(n.cond, builder)
 		visit_node(n.body, builder)
 	case ^ast.Type_Switch_Stmt:
-		visit_node(n.tag, builder)
+		if tag, ok := n.tag.derived.(^ast.Assign_Stmt); ok {
+			for lhs in tag.lhs {
+				if ident, ok := unwrap_ident(lhs); ok {
+					write_semantic_node(builder, ident, .Variable, {.Declaration})
+				}
+			}
+			visit_nodes(tag.rhs, builder)
+		} else {
+			visit_node(n.tag, builder)
+		}
 		visit_node(n.expr, builder)
 		visit_node(n.body, builder)
 	case ^ast.Assign_Stmt:
@@ -398,6 +414,7 @@ visit_node :: proc(node: ^ast.Node, builder: ^SemanticTokenBuilder) {
 	case ^ast.Proc_Group:
 		visit_nodes(n.args, builder)
 	case ^ast.Bit_Field_Type:
+		visit_node(n.backing_type, builder)
 		visit_bit_field_fields(n^, builder)
 	case ^ast.Helper_Type:
 		visit_node(n.type, builder)
@@ -407,7 +424,7 @@ visit_node :: proc(node: ^ast.Node, builder: ^SemanticTokenBuilder) {
 
 visit_value_decl :: proc(value_decl: ast.Value_Decl, builder: ^SemanticTokenBuilder) {
 	modifiers: SemanticTokenModifiers = value_decl.is_mutable ? {} : {.ReadOnly}
-	modifiers += { .Declaration }
+	modifiers += {.Declaration}
 
 	for name in value_decl.names {
 		ident := name.derived.(^ast.Ident) or_continue
@@ -430,7 +447,7 @@ visit_proc_type :: proc(node: ^ast.Proc_Type, builder: ^SemanticTokenBuilder) {
 		for param in node.params.list {
 			for name in param.names {
 				if ident, ok := name.derived.(^ast.Ident); ok {
-					write_semantic_node(builder, name, .Parameter, { .Declaration })
+					write_semantic_node(builder, name, .Parameter, {.Declaration})
 				}
 			}
 
@@ -441,7 +458,9 @@ visit_proc_type :: proc(node: ^ast.Proc_Type, builder: ^SemanticTokenBuilder) {
 
 	if node.results != nil {
 		for result in node.results.list {
-			visit_nodes(result.names, builder)
+			for name in result.names {
+				write_semantic_node(builder, name, .Variable, {.Declaration})
+			}
 			visit_node(result.type, builder)
 		}
 	}
@@ -454,10 +473,10 @@ visit_enum_fields :: proc(node: ast.Enum_Type, builder: ^SemanticTokenBuilder) {
 
 	for field in node.fields {
 		if ident, ok := field.derived.(^ast.Ident); ok {
-			write_semantic_node(builder, field, .EnumMember)
+			write_semantic_node(builder, field, .EnumMember, {.Declaration})
 		} else if f, ok := field.derived.(^ast.Field_Value); ok {
 			if _, ok := f.field.derived.(^ast.Ident); ok {
-				write_semantic_node(builder, f.field, .EnumMember)
+				write_semantic_node(builder, f.field, .EnumMember, {.Declaration})
 			}
 			visit_node(f.value, builder)
 		}
@@ -472,7 +491,7 @@ visit_struct_fields :: proc(node: ast.Struct_Type, builder: ^SemanticTokenBuilde
 	for field in node.fields.list {
 		for name in field.names {
 			if ident, ok := name.derived.(^ast.Ident); ok {
-				write_semantic_node(builder, ident, .Property)
+				write_semantic_node(builder, ident, .Property, {.Declaration})
 			}
 		}
 
@@ -488,7 +507,7 @@ visit_poly_params :: proc(params: ^ast.Field_List, builder: ^SemanticTokenBuilde
 	for param in params.list {
 		for name in param.names {
 			if poly, ok := name.derived.(^ast.Poly_Type); ok {
-				write_semantic_node(builder, poly.type, .TypeParameter)
+				write_semantic_node(builder, poly.type, .TypeParameter, {.Declaration})
 			}
 		}
 		visit_node(param.type, builder)
@@ -502,7 +521,7 @@ visit_bit_field_fields :: proc(node: ast.Bit_Field_Type, builder: ^SemanticToken
 
 	for field in node.fields {
 		if ident, ok := field.name.derived.(^ast.Ident); ok {
-			write_semantic_node(builder, ident, .Property)
+			write_semantic_node(builder, ident, .Property, {.Declaration})
 		}
 
 		visit_node(field.type, builder)
@@ -525,7 +544,7 @@ visit_import_decl :: proc(decl: ^ast.Import_Decl, builder: ^SemanticTokenBuilder
 	*/
 
 	if decl.name.text != "" {
-		write_semantic_token(builder, decl.name, .Namespace)
+		write_semantic_token(builder, decl.name, .Namespace, {.Declaration})
 	} else if len(decl.relpath.text) > 2 {
 
 		end := len(decl.relpath.text) - 1
@@ -546,7 +565,13 @@ visit_import_decl :: proc(decl: ^ast.Import_Decl, builder: ^SemanticTokenBuilder
 			break
 		}
 
-		write_semantic_at_pos(builder, decl.relpath.pos.offset + pos, end - pos, .Namespace)
+		write_semantic_at_pos(
+			builder,
+			decl.relpath.pos.offset + pos,
+			end - pos,
+			.Namespace,
+			{.Declaration},
+		)
 	}
 }
 
