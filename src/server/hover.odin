@@ -1168,12 +1168,14 @@ get_hover_information :: proc(
 		}
 	} else if position_context.implicit_selector_expr != nil {
 		implicit_selector := position_context.implicit_selector_expr
+		
 		if symbol, ok := resolve_implicit_selector(&ast_context, &position_context); ok {
 			#partial switch v in symbol.value {
 			case SymbolEnumValue:
 				for name, i in v.names {
 					if strings.compare(name, implicit_selector.field.name) == 0 {
 						construct_enum_field_symbol(&symbol, v, i)
+
 						hover.contents = write_hover_content(&ast_context, symbol, config)
 						return hover, true, true
 					}
@@ -1182,9 +1184,11 @@ get_hover_information :: proc(
 				for type in v.types {
 					enum_symbol := resolve_type_expression(&ast_context, type) or_continue
 					v := enum_symbol.value.(SymbolEnumValue) or_continue
+
 					for name, i in v.names {
 						if strings.compare(name, implicit_selector.field.name) == 0 {
 							construct_enum_field_symbol(&enum_symbol, v, i)
+
 							hover.contents = write_hover_content(&ast_context, enum_symbol, config)
 							return hover, true, true
 						}
@@ -1196,6 +1200,7 @@ get_hover_information :: proc(
 						for name, i in v.names {
 							if strings.compare(name, implicit_selector.field.name) == 0 {
 								construct_enum_field_symbol(&enum_symbol, v, i)
+
 								hover.contents = write_hover_content(&ast_context, enum_symbol, config)
 								return hover, true, true
 							}
@@ -1209,7 +1214,8 @@ get_hover_information :: proc(
 				}
 			}
 			return {}, false, true
-		}} else if position_context.identifier != nil {
+		}
+	} else if position_context.identifier != nil {
 		reset_ast_context(&ast_context)
 
 		ast_context.current_package = ast_context.document_package
