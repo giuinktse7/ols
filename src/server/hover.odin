@@ -226,9 +226,18 @@ get_soa_pointer_layout :: proc() -> Type_Layout {
 }
 
 
-layout_profile_matches_server_target :: proc(config: ^common.Config) -> bool {
+layout_target_matches_server :: proc(config: ^common.Config) -> bool {
 	if config == nil {
 		return true
+	}
+
+	checker_args, _ := strings.split(config.checker_args, " ", context.temp_allocator)
+
+	// Layouts use the target OLS was built for. An explicit checker target may differ.
+	for arg in checker_args {
+		if strings.has_prefix(arg, "-target:") {
+			return false
+		}
 	}
 
 	arch_matches := config.profile.arch == "" || config.profile.arch == ODIN_ARCH_STRING
@@ -731,7 +740,7 @@ write_hover_content :: proc(ast_context: ^AstContext, symbol: Symbol, config: ^c
 	content := write_symbol_content(ast_context, symbol)
 
 	struct_info := ""
-	if config != nil && config.enable_hover_struct_size_info && layout_profile_matches_server_target(config) {
+	if config != nil && config.enable_hover_struct_size_info && layout_target_matches_server(config) {
 		if symbol.type == .Struct {
 			if value, is_struct := symbol.value.(SymbolStructValue); is_struct {
 				if layout, known := get_struct_layout(ast_context, value, config); known {
@@ -1168,7 +1177,7 @@ get_hover_information :: proc(
 		}
 	} else if position_context.implicit_selector_expr != nil {
 		implicit_selector := position_context.implicit_selector_expr
-		
+
 		if symbol, ok := resolve_implicit_selector(&ast_context, &position_context); ok {
 			#partial switch v in symbol.value {
 			case SymbolEnumValue:

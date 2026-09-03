@@ -6424,9 +6424,10 @@ ast_hover_struct_size_extended_integer_constant_expressions :: proc(t: ^testing.
 		}
 		value := C{*}ontainer{}
 		`,
-		config = {
-			enable_hover_struct_size_info = true,
-			profile = {
+			config = {
+				enable_hover_struct_size_info = true,
+				checker_args = "-strict-style",
+				profile = {
 				defines = defines,
 			},
 		},
@@ -7564,7 +7565,7 @@ ast_hover_struct_size_native_width_types :: proc(t: ^testing.T) {
 }
 
 @(test)
-ast_hover_struct_size_cross_target_profile_is_suppressed :: proc(t: ^testing.T) {
+ast_hover_struct_size_cross_target_configuration_is_suppressed :: proc(t: ^testing.T) {
 	sources := []test.Source {
 		{
 			main = `package test
@@ -7584,6 +7585,26 @@ ast_hover_struct_size_cross_target_profile_is_suppressed :: proc(t: ^testing.T) 
 			config = {
 				enable_hover_struct_size_info = true,
 				profile = {os = "different-test-os"},
+			},
+		},
+		{
+			main = `package test
+			Foo :: struct {value: int}
+			foo := F{*}oo{}
+			`,
+			config = {
+				enable_hover_struct_size_info = true,
+				checker_args = "-target:linux_arm64",
+			},
+		},
+		{
+			main = `package test
+			Foo :: struct {value: int}
+			foo := F{*}oo{}
+			`,
+			config = {
+				enable_hover_struct_size_info = true,
+				checker_args = "-strict-style -target:windows_amd64 -vet",
 			},
 		},
 	}
