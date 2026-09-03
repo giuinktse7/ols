@@ -6445,7 +6445,7 @@ ast_hover_struct_size_extended_integer_constant_expressions :: proc(t: ^testing.
 }
 
 @(test)
-ast_hover_struct_size_typed_integer_complement_is_conservative :: proc(t: ^testing.T) {
+ast_hover_struct_size_typed_integer_operations_are_conservative :: proc(t: ^testing.T) {
 	Signed_Layout :: struct {value: [~i8(-3)]u8}
 	Terminal_Auto_Cast_Layout :: struct {
 		direct: [auto_cast 2]u8,
@@ -6505,6 +6505,28 @@ ast_hover_struct_size_typed_integer_complement_is_conservative :: proc(t: ^testi
 			`,
 			config = {enable_hover_struct_size_info = true},
 		},
+		{
+			main = `package test
+			Container :: struct {value: [u8(255) + 1]u8}
+			value := C{*}ontainer{}
+			`,
+			config = {enable_hover_struct_size_info = true},
+		},
+		{
+			main = `package test
+			COUNT: u8 : 2
+			Container :: struct {value: [COUNT + 1]u8}
+			value := C{*}ontainer{}
+			`,
+			config = {enable_hover_struct_size_info = true},
+		},
+		{
+			main = `package test
+			Container :: struct {value: [u8(2) + auto_cast 1]u8}
+			value := C{*}ontainer{}
+			`,
+			config = {enable_hover_struct_size_info = true},
+		},
 	}
 
 	test.expect_hover(t, &sources[0], "test.Container :: struct {\n\tvalues: #sparse[Index]u8,\n}")
@@ -6531,6 +6553,9 @@ ast_hover_struct_size_typed_integer_complement_is_conservative :: proc(t: ^testi
 			align_of(Terminal_Auto_Cast_Layout),
 		),
 	)
+	test.expect_hover(t, &sources[6], "test.Container :: struct {\n\tvalue: [u8(255) + 1]u8,\n}")
+	test.expect_hover(t, &sources[7], "test.Container :: struct {\n\tvalue: [COUNT + 1]u8,\n}")
+	test.expect_hover(t, &sources[8], "test.Container :: struct {\n\tvalue: [u8(2) + ]u8,\n}")
 }
 
 @(test)

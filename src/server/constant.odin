@@ -634,6 +634,13 @@ resolve_integer_constant_internal :: proc(
 
 		return 0, false
 	case ^ast.Binary_Expr:
+		kind := classify_integer_expression_type(evaluation, expr, local_integer_values)
+		if kind != .Untyped {
+			// Evaluating typed arithmetic at its declared width is possible, but not implemented.
+			// Keep the result unknown instead of accidentally applying host-int semantics.
+			return 0, false
+		}
+
 		left := resolve_integer_constant_internal(evaluation, value.left, local_integer_values, depth + 1) or_return
 		right := resolve_integer_constant_internal(evaluation, value.right, local_integer_values, depth + 1) or_return
 
