@@ -222,8 +222,11 @@ collect_bit_field_fields :: proc(
 		}
 	}
 
+	backing_type := clone_type(bit_field_type.backing_type, collection.allocator, &collection.unique_strings)
+	replace_package_alias(backing_type, package_map, collection)
+
 	value := SymbolBitFieldValue {
-		backing_type = clone_type(bit_field_type.backing_type, collection.allocator, &collection.unique_strings),
+		backing_type = backing_type,
 		names        = names[:],
 		types        = types[:],
 		ranges       = ranges[:],
@@ -249,18 +252,24 @@ collect_enum_fields :: proc(
 		name, range, value := get_enum_field_name_range_value(n, file.src)
 		append(&names, strings.clone(name, collection.allocator))
 		append(&ranges, range)
-		append(&values, clone_type(value, collection.allocator, &collection.unique_strings))
+
+		cloned := clone_type(value, collection.allocator, &collection.unique_strings)
+		replace_package_alias(cloned, package_map, collection)
+		append(&values, cloned)
 	}
 
 	temp_docs, temp_comments := get_field_docs_and_comments(file, enum_type.fields, context.temp_allocator)
 	docs := clone_dynamic_array(temp_docs, collection.allocator, &collection.unique_strings)
 	comments := clone_dynamic_array(temp_comments, collection.allocator, &collection.unique_strings)
 
+	base_type := clone_type(enum_type.base_type, collection.allocator, &collection.unique_strings)
+	replace_package_alias(base_type, package_map, collection)
+
 	value := SymbolEnumValue {
 		names     = names[:],
 		ranges    = ranges[:],
 		values    = values[:],
-		base_type = clone_type(enum_type.base_type, collection.allocator, &collection.unique_strings),
+		base_type = base_type,
 		comments  = comments[:],
 		docs      = docs[:],
 	}
@@ -285,6 +294,9 @@ collect_union_fields :: proc(
 	temp_docs, temp_comments := get_field_docs_and_comments(file, union_type.variants, context.temp_allocator)
 	docs := clone_dynamic_array(temp_docs, collection.allocator, &collection.unique_strings)
 	comments := clone_dynamic_array(temp_comments, collection.allocator, &collection.unique_strings)
+	
+	align := clone_type(union_type.align, collection.allocator, &collection.unique_strings)
+	replace_package_alias(align, package_map, collection)
 
 	value := SymbolUnionValue {
 		types         = types[:],
@@ -292,7 +304,7 @@ collect_union_fields :: proc(
 		comments      = comments[:],
 		docs          = docs[:],
 		kind          = union_type.kind,
-		align         = clone_type(union_type.align, collection.allocator, &collection.unique_strings),
+		align         = align,
 		where_clauses = clone_array(union_type.where_clauses, collection.allocator, &collection.unique_strings),
 	}
 
@@ -894,10 +906,19 @@ collect_symbols :: proc(collection: ^SymbolCollection, file: ast.File, uri: stri
 			} else {
 				symbol.value = collect_array(collection, v^, package_map)
 			}
+			if array_is_soa(v^) {
+				symbol.flags |= {.Soa}
+			}
+			if array_is_simd(v^) {
+				symbol.flags |= {.Simd}
+			}
 		case ^ast.Dynamic_Array_Type:
 			token = v^
 			token_type = .Type
 			symbol.value = collect_dynamic_array(collection, v^, package_map)
+			if dynamic_array_is_soa(v^) {
+				symbol.flags |= {.Soa}
+			}
 		case ^ast.Fixed_Capacity_Dynamic_Array_Type:
 			token = v^
 			token_type = .Type

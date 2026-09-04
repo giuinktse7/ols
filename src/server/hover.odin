@@ -1,6 +1,8 @@
 #+feature dynamic-literals
 package server
 
+import "base:intrinsics"
+
 import "core:fmt"
 import "core:log"
 import "core:odin/ast"
@@ -13,6 +15,29 @@ Type_Layout :: struct {
 	size:      int,
 	alignment: int,
 }
+
+Struct_Layout :: struct {
+	size:      int,
+	alignment: int,
+	padding:   int,
+}
+
+Layout_Evaluation_Context :: struct {
+	ast_context:                 ^AstContext,
+	config:                      ^common.Config,
+	active_layout_expressions:   map[^ast.Expr]struct{},
+	active_constant_expressions: map[^ast.Expr]struct{},
+}
+
+// This is the largest legal SIMD vector and therefore exposes the build
+// target's maximum SIMD alignment without duplicating Odin's target table.
+MAX_SIMD_ALIGNMENT :: align_of(#simd[64]u64)
+
+// Probe the compiler's target-specific cap rather than duplicating its target table.
+MAX_UNION_TAG_SIZE :: size_of(intrinsics.type_union_tag_type(union #align(8) {
+			u8,
+			u16,
+		}))
 
 get_basic_type_layout :: proc(name: string) -> (Type_Layout, bool) {
 	switch name {
@@ -34,6 +59,10 @@ get_basic_type_layout :: proc(name: string) -> (Type_Layout, bool) {
 		return {size_of(uintptr), align_of(uintptr)}, true
 	case "rawptr":
 		return {size_of(rawptr), align_of(rawptr)}, true
+	case "typeid":
+		return {size_of(typeid), align_of(typeid)}, true
+	case "any":
+		return {size_of(any), align_of(any)}, true
 	case "rune":
 		return {size_of(rune), align_of(rune)}, true
 	case "i64", "u64":
@@ -42,8 +71,22 @@ get_basic_type_layout :: proc(name: string) -> (Type_Layout, bool) {
 		return {size_of(u128), align_of(u128)}, true
 	case "bool":
 		return {size_of(bool), align_of(bool)}, true
+	case "b8":
+		return {size_of(b8), align_of(b8)}, true
+	case "b16":
+		return {size_of(b16), align_of(b16)}, true
+	case "b32":
+		return {size_of(b32), align_of(b32)}, true
+	case "b64":
+		return {size_of(b64), align_of(b64)}, true
 	case "string":
 		return {size_of(string), align_of(string)}, true
+	case "string16":
+		return {size_of(string16), align_of(string16)}, true
+	case "cstring":
+		return {size_of(cstring), align_of(cstring)}, true
+	case "cstring16":
+		return {size_of(cstring16), align_of(cstring16)}, true
 	case "f16":
 		return {size_of(f16), align_of(f16)}, true
 	case "f32":
@@ -62,15 +105,139 @@ get_basic_type_layout :: proc(name: string) -> (Type_Layout, bool) {
 		return {size_of(quaternion128), align_of(quaternion128)}, true
 	case "quaternion256":
 		return {size_of(quaternion256), align_of(quaternion256)}, true
+	case "i16le":
+		return {size_of(i16le), align_of(i16le)}, true
+	case "u16le":
+		return {size_of(u16le), align_of(u16le)}, true
+	case "i32le":
+		return {size_of(i32le), align_of(i32le)}, true
+	case "u32le":
+		return {size_of(u32le), align_of(u32le)}, true
+	case "i64le":
+		return {size_of(i64le), align_of(i64le)}, true
+	case "u64le":
+		return {size_of(u64le), align_of(u64le)}, true
+	case "i128le":
+		return {size_of(i128le), align_of(i128le)}, true
+	case "u128le":
+		return {size_of(u128le), align_of(u128le)}, true
+	case "i16be":
+		return {size_of(i16be), align_of(i16be)}, true
+	case "u16be":
+		return {size_of(u16be), align_of(u16be)}, true
+	case "i32be":
+		return {size_of(i32be), align_of(i32be)}, true
+	case "u32be":
+		return {size_of(u32be), align_of(u32be)}, true
+	case "i64be":
+		return {size_of(i64be), align_of(i64be)}, true
+	case "u64be":
+		return {size_of(u64be), align_of(u64be)}, true
+	case "i128be":
+		return {size_of(i128be), align_of(i128be)}, true
+	case "u128be":
+		return {size_of(u128be), align_of(u128be)}, true
+	case "f16le":
+		return {size_of(f16le), align_of(f16le)}, true
+	case "f32le":
+		return {size_of(f32le), align_of(f32le)}, true
+	case "f64le":
+		return {size_of(f64le), align_of(f64le)}, true
+	case "f16be":
+		return {size_of(f16be), align_of(f16be)}, true
+	case "f32be":
+		return {size_of(f32be), align_of(f32be)}, true
+	case "f64be":
+		return {size_of(f64be), align_of(f64be)}, true
 	}
 
 	return {}, false
 }
 
+get_simd_element_layout :: proc(ast_context: ^AstContext, expr: ^ast.Expr) -> (Type_Layout, bool) {
+	symbol, ok := resolve_type_expression(ast_context, expr)
+	if !ok || symbol.pointers > 0 {
+		return {}, false
+	}
 
-layout_profile_matches_server_target :: proc(config: ^common.Config) -> bool {
+	basic, basic_ok := symbol.value.(SymbolBasicValue)
+	if !basic_ok || basic.ident == nil {
+		return {}, false
+	}
+
+	switch basic.ident.name {
+	case "bool",
+	     "b8",
+	     "b16",
+	     "b32",
+	     "b64",
+	     "byte",
+	     "i8",
+	     "u8",
+	     "i16",
+	     "u16",
+	     "i32",
+	     "u32",
+	     "i64",
+	     "u64",
+	     "int",
+	     "uint",
+	     "uintptr",
+	     "rune",
+	     "f16",
+	     "f32",
+	     "f64",
+	     "rawptr":
+		return get_basic_type_layout(basic.ident.name)
+	}
+
+	return {}, false
+}
+
+get_simd_layout :: proc(element: Type_Layout, count: int) -> (Type_Layout, bool) {
+	if count < 1 || count > 64 || count & (count - 1) != 0 {
+		return {}, false
+	}
+
+	if element.size <= 0 || count > max(int) / element.size {
+		return {}, false
+	}
+
+	size := count * element.size
+	alignment := 1
+	for alignment < size {
+		if alignment > max(int) / 2 {
+			return {}, false
+		}
+
+		alignment *= 2
+	}
+
+	return {size = size, alignment = min(alignment, MAX_SIMD_ALIGNMENT)}, true
+}
+
+get_soa_pointer_layout :: proc() -> Type_Layout {
+	Element :: struct {
+		value: u8,
+	}
+	Pointer :: #soa^#soa[1]Element
+
+	return {size = size_of(Pointer), alignment = align_of(Pointer)}
+}
+
+
+layout_target_matches_server :: proc(config: ^common.Config) -> bool {
 	if config == nil {
 		return true
+	}
+
+	checker_args, _ := strings.split(config.checker_args, " ", context.temp_allocator)
+
+	// Layouts use the target OLS was built for. An explicit checker target may differ.
+	for arg in checker_args {
+		if strings.has_prefix(arg, "-target:") {
+			return false
+		}
 	}
 
 	arch_matches := config.profile.arch == "" || config.profile.arch == ODIN_ARCH_STRING
@@ -80,17 +247,40 @@ layout_profile_matches_server_target :: proc(config: ^common.Config) -> bool {
 }
 
 
-get_fixed_array_length :: proc(ast_context: ^AstContext, expr: ^ast.Expr) -> (int, bool) {
-	length, known := resolve_integer_constant(ast_context, expr)
-	return length, known && length >= 0
+resolve_array_element_count :: proc(evaluation: ^Layout_Evaluation_Context, expr: ^ast.Expr) -> (int, bool) {
+	if length, known := resolve_integer_constant(evaluation, expr); known {
+		return length, length >= 0
+	}
+
+	if symbol, ok := resolve_type_expression(evaluation.ast_context, expr); ok {
+		if enum_value, is_enum := symbol.value.(SymbolEnumValue); is_enum {
+			if len(enum_value.names) == 0 {
+				return 0, len(enum_value.values) == 0
+			}
+
+			lower, upper, range_known := resolve_enum_value_range(evaluation, enum_value)
+			if !range_known {
+				return 0, false
+			}
+
+			length := i128(upper) - i128(lower) + 1
+			if length > i128(max(int)) {
+				return 0, false
+			}
+
+			return int(length), true
+		}
+	}
+
+	return 0, false
 }
 
-get_enum_value_range :: proc(ast_context: ^AstContext, value: SymbolEnumValue) -> (int, int, bool) {
+resolve_enum_value_range :: proc(evaluation: ^Layout_Evaluation_Context, value: SymbolEnumValue) -> (int, int, bool) {
 	if len(value.names) == 0 || len(value.values) != len(value.names) {
 		return 0, 0, false
 	}
 
-	local_values := make(map[string]int, context.temp_allocator)
+	local_integer_values := make(map[string]int, context.temp_allocator)
 	current := -1
 	lower, upper := max(int), min(int)
 
@@ -103,13 +293,13 @@ get_enum_value_range :: proc(ast_context: ^AstContext, value: SymbolEnumValue) -
 			current += 1
 		} else {
 			current_known: bool
-			current, current_known = resolve_integer_constant(ast_context, value.values[i], local_values)
+			current, current_known = resolve_integer_constant(evaluation, value.values[i], local_integer_values)
 			if !current_known {
 				return 0, 0, false
 			}
 		}
 
-		local_values[name] = current
+		local_integer_values[name] = current
 		lower = min(lower, current)
 		upper = max(upper, current)
 	}
@@ -117,15 +307,15 @@ get_enum_value_range :: proc(ast_context: ^AstContext, value: SymbolEnumValue) -
 	return lower, upper, true
 }
 
-get_bit_set_value_range :: proc(ast_context: ^AstContext, expr: ^ast.Expr) -> (int, int, bool) {
+resolve_bit_set_value_range :: proc(evaluation: ^Layout_Evaluation_Context, expr: ^ast.Expr) -> (int, int, bool) {
 	if expr == nil {
 		return 0, 0, false
 	}
 
 	if binary, ok := expr.derived.(^ast.Binary_Expr);
 	   ok && (binary.op.kind == .Range_Half || binary.op.kind == .Range_Full) {
-		lower, lower_known := resolve_integer_constant(ast_context, binary.left)
-		upper, upper_known := resolve_integer_constant(ast_context, binary.right)
+		lower, lower_known := resolve_integer_constant(evaluation, binary.left)
+		upper, upper_known := resolve_integer_constant(evaluation, binary.right)
 
 		if !lower_known || !upper_known {
 			return 0, 0, false
@@ -142,9 +332,9 @@ get_bit_set_value_range :: proc(ast_context: ^AstContext, expr: ^ast.Expr) -> (i
 		return lower, upper, lower <= upper
 	}
 
-	if symbol, ok := resolve_type_expression(ast_context, expr); ok {
+	if symbol, ok := resolve_type_expression(evaluation.ast_context, expr); ok {
 		if enum_value, is_enum := symbol.value.(SymbolEnumValue); is_enum {
-			return get_enum_value_range(ast_context, enum_value)
+			return resolve_enum_value_range(evaluation, enum_value)
 		}
 	}
 
@@ -171,13 +361,78 @@ get_implicit_bit_set_layout :: proc(lower, upper: int) -> (Type_Layout, bool) {
 	return {}, false
 }
 
-get_layout_alignment :: proc(ast_context: ^AstContext, expr: ^ast.Expr) -> (int, bool) {
-	alignment, ok := resolve_integer_constant(ast_context, expr)
+resolve_layout_alignment :: proc(evaluation: ^Layout_Evaluation_Context, expr: ^ast.Expr) -> (int, bool) {
+	alignment, ok := resolve_integer_constant(evaluation, expr)
 
 	return alignment, ok && alignment > 0 && alignment & (alignment - 1) == 0
 }
 
-get_struct_layout :: proc(ast_context: ^AstContext, value: SymbolStructValue) -> (Type_Layout, bool) {
+resolve_union_layout :: proc(evaluation: ^Layout_Evaluation_Context, value: SymbolUnionValue) -> (Type_Layout, bool) {
+	// Single-variant unions may use Odin's pointer-like representation.
+	is_tagged_union := value.kind == .Normal || value.kind == .no_nil || value.kind == .shared_nil
+	if !is_tagged_union || value.poly != nil && !value.is_fully_specialized || len(value.types) < 2 {
+		return {}, false
+	}
+
+	custom_alignment := 0
+	if value.align != nil {
+		alignment, ok := resolve_layout_alignment(evaluation, value.align)
+		if !ok {
+			return {}, false
+		}
+		custom_alignment = alignment
+	}
+
+	variant_count := i128(len(value.types))
+	tag_size := 1
+	switch {
+	case variant_count < 1 << 8:
+	case variant_count < 1 << 16:
+		tag_size = 2
+	case variant_count < 1 << 32:
+		tag_size = 4
+	case:
+		return {}, false
+	}
+
+	largest_variant_size := 0
+	natural_alignment := 1
+	for variant in value.types {
+		variant_layout, ok := resolve_type_layout(evaluation, variant)
+		if !ok || variant_layout.size < 0 || variant_layout.alignment <= 0 {
+			return {}, false
+		}
+
+		largest_variant_size = max(largest_variant_size, variant_layout.size)
+		natural_alignment = max(natural_alignment, variant_layout.alignment)
+	}
+
+	alignment := natural_alignment
+	if custom_alignment > 0 {
+		alignment = custom_alignment
+	}
+
+	// Odin grows the count-sized tag to the union alignment, capped by the target.
+	tag_size = min(max(tag_size, alignment), MAX_UNION_TAG_SIZE)
+	tag_padding := (tag_size - (largest_variant_size % tag_size)) % tag_size
+	size := i128(largest_variant_size) + i128(tag_padding) + i128(tag_size)
+	final_padding := (i128(alignment) - (size % i128(alignment))) % i128(alignment)
+	size += final_padding
+	if size > i128(max(int)) {
+		return {}, false
+	}
+
+	return {size = int(size), alignment = alignment}, true
+}
+
+resolve_struct_layout :: proc(
+	evaluation: ^Layout_Evaluation_Context,
+	value: SymbolStructValue,
+) -> (
+	Struct_Layout,
+	bool,
+) {
+	ast_context := evaluation.ast_context
 	custom_alignment := 0
 	min_field_alignment := 1
 	max_field_alignment := 0
@@ -190,7 +445,7 @@ get_struct_layout :: proc(ast_context: ^AstContext, value: SymbolStructValue) ->
 	}
 
 	if value.align != nil {
-		if alignment, ok := get_layout_alignment(ast_context, value.align); ok {
+		if alignment, ok := resolve_layout_alignment(evaluation, value.align); ok {
 			custom_alignment = alignment
 		} else {
 			return {}, false
@@ -198,7 +453,7 @@ get_struct_layout :: proc(ast_context: ^AstContext, value: SymbolStructValue) ->
 	}
 
 	if value.min_field_align != nil {
-		if alignment, ok := get_layout_alignment(ast_context, value.min_field_align); ok {
+		if alignment, ok := resolve_layout_alignment(evaluation, value.min_field_align); ok {
 			min_field_alignment = alignment
 		} else {
 			return {}, false
@@ -206,7 +461,7 @@ get_struct_layout :: proc(ast_context: ^AstContext, value: SymbolStructValue) ->
 	}
 
 	if value.max_field_align != nil {
-		if alignment, ok := get_layout_alignment(ast_context, value.max_field_align); ok {
+		if alignment, ok := resolve_layout_alignment(evaluation, value.max_field_align); ok {
 			max_field_alignment = alignment
 		} else {
 			return {}, false
@@ -219,7 +474,8 @@ get_struct_layout :: proc(ast_context: ^AstContext, value: SymbolStructValue) ->
 		return {}, false
 	}
 
-	layout := Type_Layout{}
+	size := i128(0)
+	padding := i128(0)
 	natural_alignment := 1
 
 	if len(value.from_usings) != len(value.types) {
@@ -231,53 +487,86 @@ get_struct_layout :: proc(ast_context: ^AstContext, value: SymbolStructValue) ->
 			continue
 		}
 
-		field_layout, ok := get_expr_layout(ast_context, field_type)
-		if !ok {
+		field_layout, ok := resolve_type_layout(evaluation, field_type)
+		if !ok || field_layout.size < 0 || field_layout.alignment <= 0 {
 			return {}, false
 		}
 
 		natural_alignment = max(natural_alignment, field_layout.alignment)
 
 		if is_raw_union {
-			layout.size = max(layout.size, field_layout.size)
+			// Raw-union fields begin at offset zero; only the largest storage req contributes to the size.
+			size = max(size, i128(field_layout.size))
 		} else if is_packed {
-			layout.size += field_layout.size
+			// Packed fields start immediately after the previous field, even when misaligned.
+			size += i128(field_layout.size)
 		} else {
+			// Respect the struct's requested bounds.
 			field_alignment := max(field_layout.alignment, min_field_alignment)
 			if max_field_alignment > 0 {
 				field_alignment = min(field_alignment, max_field_alignment)
 			}
 
-			padding := (field_alignment - (layout.size % field_alignment)) % field_alignment
-			layout.size += padding + field_layout.size
+			// Compute the padding needed for the field to begin at an aligned offset.
+			wide_field_alignment := i128(field_alignment)
+			field_padding := (wide_field_alignment - (size % wide_field_alignment)) % wide_field_alignment
+
+			padding += field_padding
+			size += field_padding + i128(field_layout.size)
+		}
+
+		// Reject layouts that cannot be represented by Struct_Layout.
+		if size > i128(max(int)) || padding > i128(max(int)) {
+			return {}, false
 		}
 	}
 
+	alignment: int
 	if custom_alignment > 0 {
-		layout.alignment = custom_alignment
+		alignment = custom_alignment
 	} else if is_packed {
-		layout.alignment = 1
+		alignment = 1
 	} else {
-		layout.alignment = max(natural_alignment, min_field_alignment)
+		alignment = max(natural_alignment, min_field_alignment)
 		if max_field_alignment > 0 {
-			layout.alignment = min(layout.alignment, max_field_alignment)
+			alignment = min(alignment, max_field_alignment)
 		}
 	}
 
-	final_padding := (layout.alignment - (layout.size % layout.alignment)) % layout.alignment
-	layout.size += final_padding
+	alignment_128 := i128(alignment)
+	final_padding := (alignment_128 - (size % alignment_128)) % alignment_128
 
-	return layout, true
+	padding += final_padding
+	size += final_padding
+
+	if size > i128(max(int)) || padding > i128(max(int)) {
+		return {}, false
+	}
+
+	return {size = int(size), alignment = alignment, padding = int(padding)}, true
 }
 
-get_expr_layout :: proc(ast_context: ^AstContext, expr: ^ast.Expr) -> (Type_Layout, bool) {
+resolve_type_layout :: proc(evaluation: ^Layout_Evaluation_Context, expr: ^ast.Expr) -> (Type_Layout, bool) {
 	if expr == nil {
 		return {}, false
 	}
 
+	if expr in evaluation.active_layout_expressions {
+		return {}, false
+	}
+
+	evaluation.active_layout_expressions[expr] = {}
+	defer delete_key(&evaluation.active_layout_expressions, expr)
+
+	ast_context := evaluation.ast_context
+
 	// Pointer storage is independent of the pointee's layout. Resolve pointers
 	// here so recursive structures do not recursively traverse their pointees.
-	if _, ok := expr.derived.(^ast.Pointer_Type); ok {
+	if pointer, ok := expr.derived.(^ast.Pointer_Type); ok {
+		if pointer_is_soa(pointer^) {
+			return get_soa_pointer_layout(), true
+		}
+
 		return {size_of(rawptr), align_of(rawptr)}, true
 	}
 	if _, ok := expr.derived.(^ast.Multi_Pointer_Type); ok {
@@ -285,7 +574,7 @@ get_expr_layout :: proc(ast_context: ^AstContext, expr: ^ast.Expr) -> (Type_Layo
 	}
 
 	if distinct_type, ok := expr.derived.(^ast.Distinct_Type); ok {
-		return get_expr_layout(ast_context, distinct_type.type)
+		return resolve_type_layout(evaluation, distinct_type.type)
 	}
 
 	if ident, ok := expr.derived.(^ast.Ident); ok {
@@ -301,15 +590,32 @@ get_expr_layout :: proc(ast_context: ^AstContext, expr: ^ast.Expr) -> (Type_Layo
 	if symbol, ok := resolve_type_expression(ast_context, expr); ok {
 		// Pointer aliases resolve to their pointee's symbol with the pointer depth
 		// stored separately on the symbol.
+		if .SoaPointer in symbol.flags {
+			return get_soa_pointer_layout(), true
+		}
+
 		if symbol.pointers > 0 {
 			return {size_of(rawptr), align_of(rawptr)}, true
+		}
+
+		// SOA containers are lowered by the compiler to synthetic structs. Correctly
+		// reproducing their layout requires semantic field expansion, including grouped
+		// and using fields, array elements, aliases, raw unions, and recursive types.
+		// Keep them unknown until OLS can model that expansion completely.
+		if .Soa in symbol.flags {
+			return {}, false
 		}
 
 		#partial switch value in symbol.value {
 		case SymbolBasicValue:
 			return get_basic_type_layout(value.ident.name)
 		case SymbolStructValue:
-			return get_struct_layout(ast_context, value)
+			layout, known := resolve_struct_layout(evaluation, value)
+			if !known {
+				return {}, false
+			}
+
+			return {layout.size, layout.alignment}, true
 		case SymbolProcedureValue:
 			return {size_of(^rawptr), align_of(^rawptr)}, true
 		case SymbolEnumValue:
@@ -317,14 +623,21 @@ get_expr_layout :: proc(ast_context: ^AstContext, expr: ^ast.Expr) -> (Type_Layo
 				return get_basic_type_layout("int")
 			}
 
-			return get_expr_layout(ast_context, value.base_type)
+			return resolve_type_layout(evaluation, value.base_type)
+		case SymbolBitFieldValue:
+			return resolve_type_layout(evaluation, value.backing_type)
 		case SymbolFixedArrayValue:
-			if .Simd in symbol.flags || .Soa in symbol.flags {
-				return {}, false
+			length, length_known := resolve_array_element_count(evaluation, value.len)
+			if .Simd in symbol.flags {
+				element, element_known := get_simd_element_layout(ast_context, value.expr)
+				if !length_known || !element_known {
+					return {}, false
+				}
+
+				return get_simd_layout(element, length)
 			}
 
-			length, length_known := get_fixed_array_length(ast_context, value.len)
-			element, element_known := get_expr_layout(ast_context, value.expr)
+			element, element_known := resolve_type_layout(evaluation, value.expr)
 			if !length_known || !element_known || element.size > 0 && length > max(int) / element.size {
 				return {}, false
 			}
@@ -333,16 +646,12 @@ get_expr_layout :: proc(ast_context: ^AstContext, expr: ^ast.Expr) -> (Type_Layo
 		case SymbolSliceValue:
 			return {size_of([]u8), align_of([]u8)}, true
 		case SymbolDynamicArrayValue:
-			if .Soa in symbol.flags {
-				return {}, false
-			}
-
 			if value.cap == nil {
 				return {size_of([dynamic]u8), align_of([dynamic]u8)}, true
 			}
 
-			capacity, capacity_known := get_fixed_array_length(ast_context, value.cap)
-			element, element_known := get_expr_layout(ast_context, value.expr)
+			capacity, capacity_known := resolve_array_element_count(evaluation, value.cap)
+			element, element_known := resolve_type_layout(evaluation, value.expr)
 			if !capacity_known || !element_known || element.size > 0 && capacity > max(int) / element.size {
 				return {}, false
 			}
@@ -365,9 +674,9 @@ get_expr_layout :: proc(ast_context: ^AstContext, expr: ^ast.Expr) -> (Type_Layo
 		case SymbolMapValue:
 			return {size_of(map[u8]u8), align_of(map[u8]u8)}, true
 		case SymbolMatrixValue:
-			row_count, rows_known := get_fixed_array_length(ast_context, value.x)
-			column_count, columns_known := get_fixed_array_length(ast_context, value.y)
-			element, element_known := get_expr_layout(ast_context, value.expr)
+			row_count, rows_known := resolve_array_element_count(evaluation, value.x)
+			column_count, columns_known := resolve_array_element_count(evaluation, value.y)
+			element, element_known := resolve_type_layout(evaluation, value.expr)
 
 			if !rows_known ||
 			   !columns_known ||
@@ -384,42 +693,74 @@ get_expr_layout :: proc(ast_context: ^AstContext, expr: ^ast.Expr) -> (Type_Layo
 			return {size = element_count * element.size, alignment = element.alignment}, true
 		case SymbolBitSetValue:
 			if value.underlying != nil {
-				return get_expr_layout(ast_context, value.underlying)
+				return resolve_type_layout(evaluation, value.underlying)
 			}
 
-			lower, upper, range_known := get_bit_set_value_range(ast_context, value.expr)
+			lower, upper, range_known := resolve_bit_set_value_range(evaluation, value.expr)
 			if !range_known {
 				return {}, false
 			}
 
 			return get_implicit_bit_set_layout(lower, upper)
 		case SymbolUnionValue:
-			return {}, false
+			return resolve_union_layout(evaluation, value)
 		}
 	}
 
 	return {}, false
 }
 
+get_struct_layout :: proc(
+	ast_context: ^AstContext,
+	value: SymbolStructValue,
+	config: ^common.Config,
+) -> (
+	Struct_Layout,
+	bool,
+) {
+	evaluation := Layout_Evaluation_Context {
+		ast_context                 = ast_context,
+		config                      = config,
+		active_layout_expressions   = make(map[^ast.Expr]struct{}, context.temp_allocator),
+		active_constant_expressions = make(map[^ast.Expr]struct{}, context.temp_allocator),
+	}
 
-write_hover_content :: proc(ast_context: ^AstContext, symbol: Symbol, config: ^common.Config) -> MarkupContent {
+	return resolve_struct_layout(&evaluation, value)
+}
+
+
+write_symbol_content :: proc(ast_context: ^AstContext, symbol: Symbol) -> MarkupContent {
 	cat := construct_symbol_information(ast_context, symbol)
 	doc := construct_symbol_docs(symbol)
 
+	return build_markup_content(cat, doc)
+}
+
+write_hover_content :: proc(ast_context: ^AstContext, symbol: Symbol, config: ^common.Config) -> MarkupContent {
+	content := write_symbol_content(ast_context, symbol)
+
 	struct_info := ""
-	if config != nil && config.enable_hover_struct_size_info && layout_profile_matches_server_target(config) {
+	if config != nil && config.enable_hover_struct_size_info && layout_target_matches_server(config) {
 		if symbol.type == .Struct {
 			if value, is_struct := symbol.value.(SymbolStructValue); is_struct {
-				if layout, known := get_struct_layout(ast_context, value); known {
-					struct_info = fmt.aprintf("Size: %v bytes, Alignment: %v bytes", layout.size, layout.alignment)
+				if layout, known := get_struct_layout(ast_context, value, config); known {
+					if layout.padding == 0 {
+						struct_info = fmt.aprintf("Size: %v bytes, alignment %v bytes", layout.size, layout.alignment)
+					} else {
+						struct_info = fmt.aprintf(
+							"Size: %v bytes (including %v bytes padding), alignment %v bytes",
+							layout.size,
+							layout.padding,
+							layout.alignment,
+						)
+					}
 				}
 			}
 		}
 	}
 
-	content := build_markup_content(cat, doc)
 	if struct_info != "" {
-		content.value = fmt.tprintf("%v\n%v", content.value, struct_info)
+		content.value = fmt.tprintf("%v%v%v", content.value, DOC_SECTION_DELIMITER, struct_info)
 	}
 
 	return content
@@ -836,12 +1177,14 @@ get_hover_information :: proc(
 		}
 	} else if position_context.implicit_selector_expr != nil {
 		implicit_selector := position_context.implicit_selector_expr
+
 		if symbol, ok := resolve_implicit_selector(&ast_context, &position_context); ok {
 			#partial switch v in symbol.value {
 			case SymbolEnumValue:
 				for name, i in v.names {
 					if strings.compare(name, implicit_selector.field.name) == 0 {
 						construct_enum_field_symbol(&symbol, v, i)
+
 						hover.contents = write_hover_content(&ast_context, symbol, config)
 						return hover, true, true
 					}
@@ -850,9 +1193,11 @@ get_hover_information :: proc(
 				for type in v.types {
 					enum_symbol := resolve_type_expression(&ast_context, type) or_continue
 					v := enum_symbol.value.(SymbolEnumValue) or_continue
+
 					for name, i in v.names {
 						if strings.compare(name, implicit_selector.field.name) == 0 {
 							construct_enum_field_symbol(&enum_symbol, v, i)
+
 							hover.contents = write_hover_content(&ast_context, enum_symbol, config)
 							return hover, true, true
 						}
@@ -864,6 +1209,7 @@ get_hover_information :: proc(
 						for name, i in v.names {
 							if strings.compare(name, implicit_selector.field.name) == 0 {
 								construct_enum_field_symbol(&enum_symbol, v, i)
+
 								hover.contents = write_hover_content(&ast_context, enum_symbol, config)
 								return hover, true, true
 							}
@@ -877,7 +1223,8 @@ get_hover_information :: proc(
 				}
 			}
 			return {}, false, true
-		}} else if position_context.identifier != nil {
+		}
+	} else if position_context.identifier != nil {
 		reset_ast_context(&ast_context)
 
 		ast_context.current_package = ast_context.document_package
