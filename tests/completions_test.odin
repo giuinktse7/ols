@@ -542,6 +542,23 @@ ast_named_procedure_2 :: proc(t: ^testing.T) {
 }
 
 @(test)
+ast_completion_nested_call_named_arg :: proc(t: ^testing.T) {
+	source := test.Source {
+		main = `package test
+		inner :: proc(inner_param: int) {}
+		outer :: proc(outer_param: int) {}
+
+		main :: proc() {
+			outer(inner({*}))
+		}
+		`,
+		packages = {},
+	}
+
+	test.expect_completion_labels(t, &source, "", {"inner_param"}, {"outer_param"})
+}
+
+@(test)
 ast_swizzle_completion :: proc(t: ^testing.T) {
 	source := test.Source {
 		main     = `package test
