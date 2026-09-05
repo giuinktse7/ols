@@ -49,7 +49,18 @@
 		"inline_single_stmt_case": {
 			"type": "boolean",
 			"default": false,
-			"description": "When statement in the clause contains one simple statement, it will inline the case and statement in one line"
+			"description": "When a case clause contains one statement allowed by inline_single_stmt_case_mode, inline the case and statement when they fit"
+		},
+		"inline_single_stmt_case_mode": {
+			"type": "string",
+			"enum": ["Return", "Return_And_Branch", "Simple", "Any"],
+			"default": "Any",
+			"description": "Select which single statements may be inlined. Any preserves the legacy behavior"
+		},
+		"align_single_stmt_case": {
+			"type": "boolean",
+			"default": false,
+			"description": "Align statements in consecutive inline single-statement cases while respecting character_width"
 		},
 		"spaces_around_colons": {
 			"type": "boolean",
