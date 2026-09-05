@@ -1856,15 +1856,18 @@ get_identifier_completion :: proc(
 
 
 	// Only offer parameter-name completions ("foo = ") at a position that could
-	// genuinely still become a bare name: either a fresh slot (no argument node
-	// there yet) or a plain, not-yet-qualified identifier. If the argument is
-	// already a Field_Value (named arg, cursor in its value) or any other
-	// compound expression (e.g. `&foo`), it's already committed to being a
-	// value, not a name, and offering names there would just duplicate the
-	// normal value completions.
+	// genuinely still become a parameter name: either a fresh slot (no argument
+	// node there yet), a plain identifier, or the name of an existing named
+	// argument. If the cursor is in a named argument's value or any other compound
+	// expression (e.g. `&foo`), it's already committed to being a value, and
+	// offering names there would just duplicate the normal value completions.
 	at_fresh_arg_slot := position_context.call_arg == nil
 	if !at_fresh_arg_slot {
-		_, at_fresh_arg_slot = position_context.call_arg.derived.(^ast.Ident)
+		if _, ok := position_context.call_arg.derived.(^ast.Ident); ok {
+			at_fresh_arg_slot = true
+		} else if field_value, ok := position_context.call_arg.derived.(^ast.Field_Value); ok {
+			at_fresh_arg_slot = position_in_node(field_value.field, position_context.position)
+		}
 	}
 
 	if position_context.call != nil && at_fresh_arg_slot {
