@@ -575,6 +575,22 @@ ast_completion_existing_named_arg_name :: proc(t: ^testing.T) {
 }
 
 @(test)
+ast_completion_positional_args_after_cursor_do_not_consume_params :: proc(t: ^testing.T) {
+	source := test.Source {
+		main = `package test
+		foo :: proc(first: int, second: int) {}
+
+		main :: proc() {
+			foo(fi{*}, 2)
+		}
+		`,
+		packages = {},
+	}
+
+	test.expect_completion_labels(t, &source, "", {"first"})
+}
+
+@(test)
 ast_swizzle_completion :: proc(t: ^testing.T) {
 	source := test.Source {
 		main     = `package test

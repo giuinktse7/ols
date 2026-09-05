@@ -1876,9 +1876,10 @@ get_identifier_completion :: proc(
 				if value, ok := call_symbol.value.(SymbolProcedureValue); ok {
 					// Figure out which parameter names are already spoken for, so we
 					// don't suggest a name that's already been used in this call.
-					// Named args (`foo = ...`) mark their name directly; positional
-					// args consume parameter slots in order. The argument currently
-					// being typed (call_arg) is excluded, since it isn't "used" yet.
+					// Named args (`foo = ...`) anywhere in the call mark their name
+					// directly; positional args before the cursor consume parameter
+					// slots in order. The argument currently being typed (call_arg)
+					// is excluded, since it isn't "used" yet.
 					used_names := make(map[string]bool, allocator = context.temp_allocator)
 					positional_count := 0
 
@@ -1890,7 +1891,7 @@ get_identifier_completion :: proc(
 							if ident, ok := field_value.field.derived.(^ast.Ident); ok {
 								used_names[ident.name] = true
 							}
-						} else {
+						} else if arg.end.offset < position_context.position {
 							positional_count += 1
 						}
 					}
