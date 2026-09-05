@@ -1855,25 +1855,87 @@ get_identifier_completion :: proc(
 	matcher := common.make_fuzzy_matcher(lookup_name)
 
 
-	if position_context.call != nil {
+	// Only offer parameter-name completions ("foo = ") at a position that could
+	// genuinely still become a parameter name: either a fresh slot (no argument
+	// node there yet), a plain identifier, or the name of an existing named
+	// argument. If the cursor is in a named argument's value or any other compound
+	// expression (e.g. `&foo`), it's already committed to being a value, and
+	// offering names there would just duplicate the normal value completions.
+	at_fresh_arg_slot := position_context.call_arg == nil
+	if !at_fresh_arg_slot {
+		if _, ok := position_context.call_arg.derived.(^ast.Ident); ok {
+			at_fresh_arg_slot = true
+		} else if field_value, ok := position_context.call_arg.derived.(^ast.Field_Value); ok {
+			at_fresh_arg_slot = position_in_node(field_value.field, position_context.position)
+		}
+	}
+
+	if position_context.call != nil && at_fresh_arg_slot {
 		if call, ok := position_context.call.derived.(^ast.Call_Expr); ok {
 			if call_symbol, ok := resolve_type_expression(ast_context, call.expr); ok {
 				if value, ok := call_symbol.value.(SymbolProcedureValue); ok {
+					// Figure out which parameter names are already spoken for, so we
+					// don't suggest a name that's already been used in this call.
+					// Named args (`foo = ...`) anywhere in the call mark their name
+					// directly; positional args before the cursor consume parameter
+					// slots in order. The argument currently being typed (call_arg)
+					// is excluded, since it isn't "used" yet.
+					used_names := make(map[string]bool, allocator = context.temp_allocator)
+					positional_count := 0
+
+					for arg in call.args {
+						if arg == position_context.call_arg {
+							continue
+						}
+						if field_value, ok := arg.derived.(^ast.Field_Value); ok {
+							if ident, ok := field_value.field.derived.(^ast.Ident); ok {
+								used_names[ident.name] = true
+							}
+						} else if arg.end.offset < position_context.position {
+							positional_count += 1
+						}
+					}
+
+					flat_index := 0
 					for arg in value.orig_arg_types {
-						// For now we just add params with default values, could add everything we more logic in the future
-						if arg.default_value != nil {
-							for name in arg.names {
-								if ident, ok := name.derived.(^ast.Ident); ok {
-									if symbol, ok := resolve_type_expression(ast_context, arg.default_value); ok {
-										if score, ok := common.fuzzy_match(matcher, ident.name); ok == 1 {
-											symbol.type_name = symbol.name
-											symbol.type_pkg = symbol.pkg
-											symbol.name = clean_ident(ident.name)
-											symbol.type = .Field
-											append(results, CompletionResult{score = score * 1.1, symbol = symbol})
-										}
+						for name in arg.names {
+							defer flat_index += 1
+
+							ident := name.derived.(^ast.Ident) or_continue
+							if ident.name in used_names {
+								continue
+							}
+							if flat_index < positional_count {
+								continue
+							}
+
+							// If this parameter name already resolves to a local
+							// or global in scope, skip it here - the normal
+							// identifier-completion passes below will already
+							// surface it, and suggesting it again here would
+							// just duplicate that entry under a different kind.
+							already_in_scope := ident.name in ast_context.globals
+							if !already_in_scope {
+								for local_group in ast_context.locals {
+									if ident.name in local_group {
+										already_in_scope = true
+										break
 									}
 								}
+							}
+							if already_in_scope {
+								continue
+							}
+
+							arg_expr := arg.type != nil ? arg.type : arg.default_value
+							symbol := resolve_type_expression(ast_context, arg_expr) or_continue
+
+							if score, ok := common.fuzzy_match(matcher, ident.name); ok == 1 {
+								symbol.type_name = symbol.name
+								symbol.type_pkg = symbol.pkg
+								symbol.name = clean_ident(ident.name)
+								symbol.type = .Field
+								append(results, CompletionResult{score = score * 1.1, symbol = symbol})
 							}
 						}
 					}
