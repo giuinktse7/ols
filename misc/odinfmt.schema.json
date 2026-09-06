@@ -32,6 +32,12 @@
 			"default": false,
 			"description": "Convert all do statements to brace blocks"
 		},
+		"preserve_do_mode": {
+			"type": "string",
+			"enum": ["Return", "Guard", "Return_And_Branch", "Simple", "Any"],
+			"default": "Any",
+			"description": "Select which do statement bodies are preserved; Guard permits return, break, and continue. Other do bodies are converted to brace blocks. convert_do overrides this setting"
+		},
 		"brace_style": {
 			"type": "string",
 			"enum": ["_1TBS", "Allman", "Stroustrup", "K_And_R"],

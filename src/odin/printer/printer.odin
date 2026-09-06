@@ -54,11 +54,12 @@ Trailing_Comment_Record :: struct {
 
 Config :: struct {
 	character_width:              int,
-	spaces:                       int,  //Spaces per indentation
-	newline_limit:                int,  //The limit of newlines between statements and declarations.
+	spaces:                       int, //Spaces per indentation
+	newline_limit:                int, //The limit of newlines between statements and declarations.
 	tabs:                         bool, //Enable or disable tabs
 	tabs_width:                   int,
 	convert_do:                   bool, //Convert all do statements to brace blocks
+	preserve_do_mode:             Preserve_Do_Mode,
 	brace_style:                  Brace_Style,
 	indent_cases:                 bool,
 	newline_style:                Newline_Style,
@@ -72,6 +73,13 @@ Config :: struct {
 	align_constant_definitions:   bool,
 	align_comments:               bool, //Align trailing line comments to the same column.
 	multiline_composite_literals: bool,
+}
+Preserve_Do_Mode :: enum {
+	Any,
+	Simple,
+	Return_And_Branch,
+	Guard,
+	Return,
 }
 
 Brace_Style :: enum {
@@ -113,6 +121,7 @@ when ODIN_OS == .Windows {
 		spaces                       = 4,
 		newline_limit                = 2,
 		convert_do                   = false,
+		preserve_do_mode             = .Any,
 		tabs                         = true,
 		tabs_width                   = 4,
 		brace_style                  = ._1TBS,
@@ -133,6 +142,7 @@ when ODIN_OS == .Windows {
 		spaces                       = 4,
 		newline_limit                = 2,
 		convert_do                   = false,
+		preserve_do_mode             = .Any,
 		tabs                         = true,
 		tabs_width                   = 4,
 		brace_style                  = ._1TBS,
