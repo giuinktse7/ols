@@ -66,6 +66,7 @@ Config :: struct {
 	inline_single_stmt_case:      bool,
 	spaces_around_colons:         bool, //Put spaces to the left of a colon as well as the right. `foo: bar` => `foo : bar`
 	space_single_line_blocks:     bool,
+	closing_brace_on_own_line:    bool,
 	align_struct_fields:          bool,
 	align_struct_values:          bool,
 	align_struct_declarations:    bool,
@@ -121,6 +122,7 @@ when ODIN_OS == .Windows {
 		character_width              = 100,
 		sort_imports                 = true,
 		spaces_around_colons         = false,
+		closing_brace_on_own_line    = false,
 		align_struct_fields          = true,
 		align_struct_values          = true,
 		align_struct_declarations    = false,
@@ -141,6 +143,7 @@ when ODIN_OS == .Windows {
 		character_width              = 100,
 		sort_imports                 = true,
 		spaces_around_colons         = false,
+		closing_brace_on_own_line    = false,
 		align_struct_fields          = true,
 		align_struct_values          = true,
 		align_struct_declarations    = false,

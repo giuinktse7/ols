@@ -995,7 +995,13 @@ visit_stmt :: proc(
 			if p.config.space_single_line_blocks && is_single_line {
 				document = cons(document, break_with_no_newline())
 			}
-			document = cons(document, visit_end_brace(p, v.end))
+
+			closing_brace_newline_limit := 0
+			if p.config.closing_brace_on_own_line && !is_single_line {
+				closing_brace_newline_limit = p.config.newline_limit + 1
+			}
+
+			document = cons(document, visit_end_brace(p, v.end, closing_brace_newline_limit))
 		}
 	case ^ast.If_Stmt:
 		if v.label != nil {
@@ -1275,11 +1281,7 @@ visit_stmt :: proc(
 			document = cons(document, text("return"))
 
 			if is_return_stmt_ending_with_comp_lit_expr(v.results) {
-				document = cons(
-					document,
-					text(" "),
-					visit_exprs(p, v.results, {.Add_Comma}),
-				)
+				document = cons(document, text(" "), visit_exprs(p, v.results, {.Add_Comma}))
 			} else if !is_return_stmt_ending_with_call_expr(v.results) {
 				document = cons_with_nopl(document, group(nest(visit_exprs(p, v.results, {.Add_Comma, .Group}))))
 			} else {
