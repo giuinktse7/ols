@@ -995,7 +995,13 @@ visit_stmt :: proc(
 			if p.config.space_single_line_blocks && is_single_line {
 				document = cons(document, break_with_no_newline())
 			}
-			document = cons(document, visit_end_brace(p, v.end))
+
+			closing_brace_newline_limit := 0
+			if p.config.closing_brace_on_own_line && !is_single_line {
+				closing_brace_newline_limit = p.config.newline_limit + 1
+			}
+			
+			document = cons(document, visit_end_brace(p, v.end, closing_brace_newline_limit))
 		}
 	case ^ast.If_Stmt:
 		if v.label != nil {
