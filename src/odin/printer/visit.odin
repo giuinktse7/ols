@@ -910,20 +910,50 @@ visit_state_flags :: proc(p: ^Printer, flags: ast.Node_State_Flags) -> ^Document
 }
 
 @(private)
-enforce_fit_if_do :: proc(stmt: ^ast.Stmt, document: ^Document) -> ^Document {
-	if block_uses_do(stmt) {
+enforce_fit_if_do :: proc(p: ^Printer, stmt: ^ast.Stmt, document: ^Document) -> ^Document {
+	if block_preserves_do(p, stmt) {
 		return enforce_fit(document)
 	}
 
 	return document
 }
 
-block_uses_do :: proc(stmt: ^ast.Stmt) -> bool {
+block_preserves_do :: proc(p: ^Printer, stmt: ^ast.Stmt) -> bool {
 	if v, ok := stmt.derived.(^ast.Block_Stmt); ok {
-		return v.uses_do
+		return do_block_is_preserved(p, v)
 	}
 
 	return false
+}
+
+@(private)
+do_block_is_preserved :: proc(p: ^Printer, block: ^ast.Block_Stmt) -> bool {
+	if !block.uses_do || p.config.convert_do || len(block.stmts) != 1 {
+		return false
+	}
+
+	return do_stmt_matches_mode(block.stmts[0], p.config.preserve_do_mode)
+}
+
+@(private)
+do_stmt_matches_mode :: proc(stmt: ^ast.Stmt, mode: Preserve_Do_Mode) -> bool {
+	if mode == .Any {
+		return true
+	}
+
+	#partial switch v in stmt.derived {
+	case ^ast.Return_Stmt:
+		return true
+	case ^ast.Branch_Stmt:
+		if mode == .Guard {
+			return v.tok.text == "break" || v.tok.text == "continue"
+		}
+		return mode == .Return_And_Branch || mode == .Simple
+	case ^ast.Assign_Stmt, ^ast.Expr_Stmt, ^ast.Using_Stmt, ^ast.Value_Decl:
+		return mode == .Simple
+	case:
+		return false
+	}
 }
 
 @(private)
@@ -965,7 +995,7 @@ visit_stmt :: proc(
 	case ^ast.Using_Stmt:
 		document = cons(document, cons_with_nopl(text("using"), visit_exprs(p, v.list, {.Add_Comma})))
 	case ^ast.Block_Stmt:
-		uses_do := v.uses_do && !p.config.convert_do
+		uses_do := do_block_is_preserved(p, v)
 		is_single_line := v.open.line == v.end.line
 
 		if v.label != nil {
@@ -1092,7 +1122,7 @@ visit_stmt :: proc(
 			else_on_newline :=
 				p.config.brace_style == .Allman ||
 				p.config.brace_style == .Stroustrup ||
-				(!p.config.convert_do && block_uses_do(v.body))
+				block_preserves_do(p, v.body)
 			if else_on_newline {
 				document = cons(document, newline(1))
 			}
@@ -1107,9 +1137,7 @@ visit_stmt :: proc(
 
 
 		}
-		if !p.config.convert_do {
-			document = enforce_fit_if_do(v.body, document)
-		}
+		document = enforce_fit_if_do(p, v.body, document)
 	case ^ast.Switch_Stmt:
 		if v.partial {
 			document = cons(document, text("#partial"), break_with_no_newline())
@@ -1256,9 +1284,7 @@ visit_stmt :: proc(
 		document = cons_with_nopl(document, visit_stmt(p, v.body))
 		set_source_position(p, v.body.end)
 
-		if !p.config.convert_do {
-			document = enforce_fit_if_do(v.body, document)
-		}
+		document = enforce_fit_if_do(p, v.body, document)
 	case ^ast.Unroll_Range_Stmt:
 		if v.label != nil {
 			document = cons(document, visit_expr(p, v.label), text(":"), break_with_space())
@@ -1281,9 +1307,7 @@ visit_stmt :: proc(
 		document = cons_with_nopl(document, visit_stmt(p, v.body))
 		set_source_position(p, v.body.end)
 
-		if !p.config.convert_do {
-			document = enforce_fit_if_do(v.body, document)
-		}
+		document = enforce_fit_if_do(p, v.body, document)
 	case ^ast.Range_Stmt:
 		if v.label != nil {
 			document = cons(document, visit_expr(p, v.label), text(":"), break_with_space())
@@ -1321,9 +1345,7 @@ visit_stmt :: proc(
 		document = cons_with_nopl(document, visit_stmt(p, v.body))
 		set_source_position(p, v.body.end)
 
-		if !p.config.convert_do {
-			document = enforce_fit_if_do(v.body, document)
-		}
+		document = enforce_fit_if_do(p, v.body, document)
 	case ^ast.Return_Stmt:
 		if v.results == nil {
 			document = cons(document, text("return"))
@@ -1368,7 +1390,7 @@ visit_stmt :: proc(
 			else_on_newline :=
 				p.config.brace_style == .Allman ||
 				p.config.brace_style == .Stroustrup ||
-				(!p.config.convert_do && block_uses_do(v.body))
+				block_preserves_do(p, v.body)
 			if else_on_newline {
 				document = cons(document, newline(1))
 			}
@@ -1382,9 +1404,7 @@ visit_stmt :: proc(
 			}
 		}
 
-		if !p.config.convert_do {
-			document = enforce_fit_if_do(v.body, document)
-		}
+		document = enforce_fit_if_do(p, v.body, document)
 	case ^ast.Branch_Stmt:
 		document = cons(document, text(v.tok.text))
 
@@ -1466,19 +1486,26 @@ contains_comments_in_range :: proc(p: ^Printer, pos: tokenizer.Pos, end: tokeniz
 	return false
 }
 
+Contains_Do_Data :: struct {
+	printer: ^Printer,
+	found:   bool,
+}
+
 @(private)
 contains_do_in_expression :: proc(p: ^Printer, expr: ^ast.Expr) -> bool {
-	found_do := false
+	data := Contains_Do_Data {
+		printer = p,
+	}
 
 	visit_fn :: proc(visitor: ^ast.Visitor, node: ^ast.Node) -> ^ast.Visitor {
 		if node == nil {
 			return nil
 		}
 
-		found_do := cast(^bool)visitor.data
+		data := cast(^Contains_Do_Data)visitor.data
 		if block, ok := node.derived.(^ast.Block_Stmt); ok {
-			if block.uses_do == true {
-				found_do^ = true
+			if do_block_is_preserved(data.printer, block) {
+				data.found = true
 			}
 		}
 
@@ -1486,13 +1513,13 @@ contains_do_in_expression :: proc(p: ^Printer, expr: ^ast.Expr) -> bool {
 	}
 
 	visit := ast.Visitor {
-		data  = &found_do,
+		data  = &data,
 		visit = visit_fn,
 	}
 
 	ast.walk(&visit, expr)
 
-	return found_do
+	return data.found
 }
 
 @(private)
@@ -1846,10 +1873,8 @@ visit_expr :: proc(
 		contains_comments := contains_comments_in_range(p, v.open, v.close)
 		contains_do := false
 
-		if !p.config.convert_do {
-			for arg in v.args {
-				contains_do |= contains_do_in_expression(p, arg)
-			}
+		for arg in v.args {
+			contains_do |= contains_do_in_expression(p, arg)
 		}
 
 		if is_call_expr_nestable(v.args) {

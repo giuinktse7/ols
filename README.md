@@ -171,6 +171,8 @@ Options:
 
 - `convert_do`: Convert all do statements to brace blocks.
 
+- `preserve_do_mode`: Select which `do` statement bodies are preserved. `Return` permits only return statements; `Guard` permits `return`, `break`, and `continue`; `Return_And_Branch` also permits `fallthrough`; `Simple` also permits assignments, declarations, using statements, and expression statements; `Any` preserves every `do` statement. Other bodies are converted to brace blocks. Defaults to `Any`; `convert_do` overrides this setting.
+
 - `brace_style`: Style of braces. One of `_1TBS`, `Allman`, `Stroustrup`, `K_And_R`.
 
 - `indent_cases`: Indent case statements within a switch.
