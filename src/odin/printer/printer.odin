@@ -58,6 +58,7 @@ Config :: struct {
 	character_width:              int,
 	spaces:                       int, //Spaces per indentation
 	newline_limit:                int, //The limit of newlines between statements and declarations.
+	remove_empty_lines_at_start_of_blocks: bool,
 	tabs:                         bool, //Enable or disable tabs
 	tabs_width:                   int,
 	convert_do:                   bool, //Convert all do statements to brace blocks
@@ -126,6 +127,7 @@ when ODIN_OS == .Windows {
 	default_style := Config {
 		spaces                       = 4,
 		newline_limit                = 2,
+		remove_empty_lines_at_start_of_blocks = false,
 		convert_do                   = false,
 		tabs                         = true,
 		tabs_width                   = 4,
@@ -150,6 +152,7 @@ when ODIN_OS == .Windows {
 	default_style := Config {
 		spaces                       = 4,
 		newline_limit                = 2,
+		remove_empty_lines_at_start_of_blocks = false,
 		convert_do                   = false,
 		tabs                         = true,
 		tabs_width                   = 4,
