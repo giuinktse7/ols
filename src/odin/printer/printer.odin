@@ -78,6 +78,7 @@ Config :: struct {
 	multiline_composite_literals: bool,
 	preserve_struct_blank_lines:  bool,
 }
+
 Inline_Single_Stmt_Case_Mode :: enum {
 	Any,
 	Simple,
