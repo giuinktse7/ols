@@ -189,6 +189,8 @@ Options:
 
 - `space_single_line_blocks`: Put spaces around braces of single-line blocks: `{return 0}` => `{ return 0 }`
 
+- `closing_brace_on_own_line`: Put the closing brace of a multiline statement block on its own line.
+
 - `align_struct_fields`: Align the types of struct fields so they all start at the same column.
 
 - `align_struct_values`: Align the values of struct fields when assigning a struct value to a variable so they all start at the same column.

@@ -1039,7 +1039,6 @@ visit_stmt :: proc(
 			if p.config.closing_brace_on_own_line && !is_single_line {
 				closing_brace_newline_limit = p.config.newline_limit + 1
 			}
-			
 			document = cons(document, visit_end_brace(p, v.end, closing_brace_newline_limit))
 		}
 	case ^ast.If_Stmt:
@@ -1345,11 +1344,7 @@ visit_stmt :: proc(
 			document = cons(document, text("return"))
 
 			if is_return_stmt_ending_with_comp_lit_expr(v.results) {
-				document = cons(
-					document,
-					text(" "),
-					visit_exprs(p, v.results, {.Add_Comma}),
-				)
+				document = cons(document, text(" "), visit_exprs(p, v.results, {.Add_Comma}))
 			} else if !is_return_stmt_ending_with_call_expr(v.results) {
 				document = cons_with_nopl(document, group(nest(visit_exprs(p, v.results, {.Add_Comma, .Group}))))
 			} else {
@@ -2295,7 +2290,7 @@ visit_switch_block_stmts :: proc(p: ^Printer, stmts: []^ast.Stmt) -> ^Document {
 		if p.force_statement_fit {
 			stmt_document = enforce_fit(stmt_document)
 		}
-		
+
 		document = cons(document, stmt_document)
 
 		info, has_info := p.case_alignment_info[stmt.pos.offset]
