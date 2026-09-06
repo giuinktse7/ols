@@ -183,7 +183,7 @@ Options:
 
 - `inline_single_stmt_case_mode`: Select which single statements may be inlined. `Return` permits only return statements; `Return_And_Branch` also permits `break`, `continue`, and `fallthrough`; `Simple` also permits assignments, declarations, using statements, and expression statements; `Any` permits every statement and preserves the legacy behavior. Defaults to `Any`.
 
-- `align_single_stmt_case`: Align statements in consecutive inline single-statement cases. Blank lines, comments, non-qualifying cases, and cases that exceed `character_width` split alignment groups.
+- `align_single_stmt_case`: Align statements in consecutive inline single-statement cases while respecting `character_width`.
 
 - `spaces_around_colons`: Put a space on both sides of a single colon during variable/field declaration, such as `foo : bar`
 

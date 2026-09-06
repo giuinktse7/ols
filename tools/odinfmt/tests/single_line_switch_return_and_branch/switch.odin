@@ -1,7 +1,5 @@
 package single_line_switch_return_and_branch
 
-helper :: proc() {}
-
 classify :: proc(value: int) -> int {
 	switch value {
 	case 0:
@@ -11,9 +9,7 @@ classify :: proc(value: int) -> int {
 	case 2:
 		fallthrough
 	case 3:
-		value = 30
-	case 4:
-		helper()
+		x: = 30
 	}
 	return value
 }

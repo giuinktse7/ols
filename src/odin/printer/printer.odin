@@ -87,6 +87,7 @@ Inline_Single_Stmt_Case_Mode :: enum {
 	Return,
 }
 
+
 Brace_Style :: enum {
 	_1TBS,
 	Allman,
@@ -142,7 +143,6 @@ when ODIN_OS == .Windows {
 		align_struct_declarations    = false,
 		align_constant_definitions   = false,
 		align_comments               = false,
-		closing_brace_on_own_line    = true,
 		multiline_composite_literals = false,
 		preserve_struct_blank_lines  = false,
 	}
