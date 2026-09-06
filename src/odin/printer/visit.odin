@@ -8,6 +8,14 @@ import "core:slice"
 import "core:strconv"
 import "core:strings"
 
+Case_Alignment_Info :: struct {
+	padding:      ^Document,
+	header_width: int,
+	flat_width:   int,
+	indentation:  int,
+	has_comments: bool,
+}
+
 @(private)
 comment_before_position :: proc(p: ^Printer, pos: tokenizer.Pos) -> bool {
 	if len(p.comments) <= p.latest_comment_index {
@@ -979,7 +987,21 @@ visit_stmt :: proc(
 			compute_constant_alignment(p, v.stmts)
 		}
 
-		block := visit_block_stmts(p, v.stmts)
+		block_is_nested := !(block_type == .Switch_Stmt && !p.config.indent_cases) && !uses_do
+		if block_is_nested {
+			p.current_indentation += 1
+		}
+
+		block: ^Document
+		if block_type == .Switch_Stmt && p.config.align_single_stmt_case {
+			block = visit_switch_block_stmts(p, v.stmts)
+		} else {
+			block = visit_block_stmts(p, v.stmts)
+		}
+
+		if block_is_nested {
+			p.current_indentation -= 1
+		}
 
 		comment_end, _ := visit_comments(p, tokenizer.Pos{line = v.end.line, offset = v.end.offset})
 
@@ -995,6 +1017,7 @@ visit_stmt :: proc(
 			if p.config.space_single_line_blocks && is_single_line {
 				document = cons(document, break_with_no_newline())
 			}
+
 			document = cons(document, visit_end_brace(p, v.end))
 		}
 	case ^ast.If_Stmt:
@@ -1103,8 +1126,29 @@ visit_stmt :: proc(
 
 		if count := len(v.body); count > 0 {
 			set_source_position(p, v.body[0].pos)
-			if count == 1 && p.config.inline_single_stmt_case {
-				document = group(nest(cons_with_opl(document, nest(visit_stmt(p, v.body[0])))))
+			if count == 1 &&
+			   p.config.inline_single_stmt_case &&
+			   single_stmt_case_matches_mode(v.body[0], p.config.inline_single_stmt_case_mode) {
+				header_width, header_is_flat := get_flat_document_width(document)
+
+				p.current_indentation += 1
+				body_document := visit_stmt(p, v.body[0])
+				p.current_indentation -= 1
+
+				body_width, body_is_flat := get_flat_document_width(body_document)
+				padding := empty()
+
+				if p.config.align_single_stmt_case && header_is_flat && body_is_flat {
+					p.case_alignment_info[v.pos.offset] = Case_Alignment_Info {
+						padding      = padding,
+						header_width = header_width,
+						flat_width   = header_width + 1 + body_width,
+						indentation  = p.current_indentation,
+						has_comments = case_clause_has_comments(p, v),
+					}
+				}
+
+				document = group(nest(cons(document, padding, break_with_space(), nest(body_document))))
 			} else {
 				document = cons(document, nest(cons(newline(1), visit_block_stmts(p, v.body))))
 			}
@@ -2080,6 +2124,180 @@ visit_block_stmts :: proc(p: ^Printer, stmts: []^ast.Stmt) -> ^Document {
 		}
 	}
 
+	return document
+}
+
+@(private)
+single_stmt_case_matches_mode :: proc(stmt: ^ast.Stmt, mode: Inline_Single_Stmt_Case_Mode) -> bool {
+	if mode == .Any {
+		return true
+	}
+
+	#partial switch _ in stmt.derived {
+	case ^ast.Return_Stmt:
+		return true
+	case ^ast.Branch_Stmt:
+		return mode == .Return_And_Branch || mode == .Simple
+	case ^ast.Assign_Stmt, ^ast.Expr_Stmt, ^ast.Using_Stmt, ^ast.Value_Decl:
+		return mode == .Simple
+	case:
+		return false
+	}
+}
+
+@(private)
+get_flat_document_width :: proc(document: ^Document) -> (width: int, is_flat: bool) {
+	#partial switch v in document {
+	case Document_Nil, Document_Line_Suffix:
+		return 0, true
+	case Document_Newline:
+		return 0, v.amount == 0
+	case Document_Text:
+		return len(v.value), true
+	case Document_Nest:
+		return get_flat_document_width(v.document)
+	case Document_Break:
+		return len(v.value), true
+	case Document_Group:
+		if v.mode == .Break {
+			return 0, false
+		}
+
+		return get_flat_document_width(v.document)
+	case Document_Cons:
+		width := 0
+
+		for element in v.elements {
+			element_width, element_is_flat := get_flat_document_width(element)
+
+			if !element_is_flat {
+				return 0, false
+			}
+
+			width += element_width
+		}
+
+		return width, true
+	case Document_If_Break_Or:
+		if v.fit_document == nil {
+			return 0, true
+		}
+
+		return get_flat_document_width(v.fit_document)
+	case Document_Align:
+		return get_flat_document_width(v.document)
+	case Document_Break_Parent:
+		return 0, false
+	}
+
+	return 0, false
+}
+
+@(private)
+case_clause_has_comments :: proc(p: ^Printer, clause: ^ast.Case_Clause) -> bool {
+	for group in p.comments {
+		for comment in group.list {
+			if clause.pos.line <= comment.pos.line && comment.pos.line <= clause.end.line {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+@(private)
+comments_between_stmts :: proc(p: ^Printer, previous, current: ^ast.Stmt) -> bool {
+	for group in p.comments {
+		for comment in group.list {
+			if previous.pos.offset < comment.pos.offset && comment.pos.offset < current.pos.offset {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+@(private)
+align_case_info_run :: proc(p: ^Printer, infos: []Case_Alignment_Info) {
+	if len(infos) < 2 {
+		return
+	}
+
+	target_width := 0
+	for info in infos {
+		target_width = max(target_width, info.header_width)
+	}
+
+	// Padding can make a previously fitting case exceed character_width. Such a case
+	// remains unaligned and divides the cases on either side into independent groups.
+	for info, i in infos {
+		padding := target_width - info.header_width
+		line_width := info.indentation * p.indentation_width + info.flat_width + padding
+
+		if line_width >= p.config.character_width {
+			info.padding^ = Document_Break_Parent{}
+
+			align_case_info_run(p, infos[:i])
+			align_case_info_run(p, infos[i + 1:])
+			return
+		}
+	}
+
+	for info in infos {
+		padding := target_width - info.header_width
+		if padding > 0 {
+			info.padding^ = Document_Text {
+				value = strings.repeat(" ", padding),
+			}
+		}
+	}
+}
+
+@(private)
+visit_switch_block_stmts :: proc(p: ^Printer, stmts: []^ast.Stmt) -> ^Document {
+	document := empty()
+	run := make([dynamic]Case_Alignment_Info, p.allocator)
+	previous_stmt: ^ast.Stmt
+
+	for stmt, i in stmts {
+		last_index := max(0, i - 1)
+		if stmts[last_index].end.line == stmt.pos.line && i != 0 && stmt.pos.line not_in p.disabled_lines {
+			document = group(cons(document, break_with("; ")))
+		}
+
+		stmt_document := visit_stmt(p, stmt, .Generic, false, true)
+		if p.force_statement_fit {
+			stmt_document = enforce_fit(stmt_document)
+		}
+
+		document = cons(document, stmt_document)
+
+		info, has_info := p.case_alignment_info[stmt.pos.offset]
+		fits_without_alignment :=
+			has_info &&
+			!info.has_comments &&
+			info.indentation * p.indentation_width + info.flat_width < p.config.character_width
+
+		continues_run :=
+			fits_without_alignment &&
+			len(run) > 0 &&
+			previous_stmt != nil &&
+			stmt.pos.line <= previous_stmt.end.line + 1 &&
+			!comments_between_stmts(p, previous_stmt, stmt)
+
+		if !continues_run && len(run) > 0 {
+			align_case_info_run(p, run[:])
+			clear(&run)
+		}
+
+		if fits_without_alignment {
+			append(&run, info)
+		}
+
+		previous_stmt = stmt
+	}
+
+	align_case_info_run(p, run[:])
 	return document
 }
 

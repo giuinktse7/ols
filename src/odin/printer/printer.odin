@@ -33,6 +33,8 @@ Printer :: struct {
 	line_indentation:     int, //Indentation depth of the current line.
 	trailing_comments:    [dynamic]Trailing_Comment_Record,
 	constant_alignment:   map[int]int,
+	case_alignment_info:  map[int]Case_Alignment_Info,
+	current_indentation:  int,
 }
 
 Disabled_Info :: struct {
@@ -64,6 +66,8 @@ Config :: struct {
 	newline_style:                Newline_Style,
 	sort_imports:                 bool,
 	inline_single_stmt_case:      bool,
+	inline_single_stmt_case_mode: Inline_Single_Stmt_Case_Mode,
+	align_single_stmt_case:       bool,
 	spaces_around_colons:         bool, //Put spaces to the left of a colon as well as the right. `foo: bar` => `foo : bar`
 	space_single_line_blocks:     bool,
 	align_struct_fields:          bool,
@@ -72,6 +76,13 @@ Config :: struct {
 	align_constant_definitions:   bool,
 	align_comments:               bool, //Align trailing line comments to the same column.
 	multiline_composite_literals: bool,
+}
+
+Inline_Single_Stmt_Case_Mode :: enum {
+	Any,
+	Simple,
+	Return_And_Branch,
+	Return,
 }
 
 Brace_Style :: enum {
@@ -120,6 +131,8 @@ when ODIN_OS == .Windows {
 		newline_style                = .CRLF,
 		character_width              = 100,
 		sort_imports                 = true,
+		inline_single_stmt_case_mode = .Any,
+		align_single_stmt_case       = false,
 		spaces_around_colons         = false,
 		align_struct_fields          = true,
 		align_struct_values          = true,
@@ -140,6 +153,8 @@ when ODIN_OS == .Windows {
 		newline_style                = .LF,
 		character_width              = 100,
 		sort_imports                 = true,
+		inline_single_stmt_case_mode = .Any,
+		align_single_stmt_case       = false,
 		spaces_around_colons         = false,
 		align_struct_fields          = true,
 		align_struct_values          = true,

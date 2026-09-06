@@ -179,7 +179,11 @@ Options:
 
 - `sort_imports`: A boolean that defaults to true, which can be set to false to disable sorting imports.
 
-- `inline_single_stmt_case`: When statement in the clause contains one simple statement, it will inline the case and statement in one line.
+- `inline_single_stmt_case`: When a case clause contains one statement allowed by `inline_single_stmt_case_mode`, inline the case and statement when they fit.
+
+- `inline_single_stmt_case_mode`: Select which single statements may be inlined. `Return` permits only return statements; `Return_And_Branch` also permits `break`, `continue`, and `fallthrough`; `Simple` also permits assignments, declarations, using statements, and expression statements; `Any` permits every statement and preserves the legacy behavior. Defaults to `Any`.
+
+- `align_single_stmt_case`: Align statements in consecutive inline single-statement cases while respecting `character_width`.
 
 - `spaces_around_colons`: Put a space on both sides of a single colon during variable/field declaration, such as `foo : bar`
 
