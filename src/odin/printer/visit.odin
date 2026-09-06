@@ -975,6 +975,23 @@ visit_stmt :: proc(
 
 		set_source_position(p, v.pos)
 
+		if p.config.remove_empty_lines_at_start_of_blocks && !v.uses_do {
+			// Advance across only the leading whitespace. This also handles comments,
+			// attributes, and formatting directives without consuming their contents.
+			leading_newlines := 0
+			for offset := v.pos.offset + 1; offset < len(p.src); offset += 1 {
+				ch := p.src[offset]
+
+				if ch == '\n' {
+					leading_newlines += 1
+				} else if ch != ' ' && ch != '\t' && ch != '\r' {
+					break
+				}
+			}
+
+			p.source_position.line += max(leading_newlines - 1, 0)
+		}
+
 		if p.config.align_constant_definitions {
 			compute_constant_alignment(p, v.stmts)
 		}
