@@ -82,6 +82,11 @@
 			"default": false,
 			"description": "Put spaces around braces of single-line blocks: `{return 0}` => `{ return 0 }`"
 		},
+		"closing_brace_on_own_line": {
+			"type": "boolean",
+			"default": false,
+			"description": "Put the closing brace of a multiline statement block on its own line"
+		},
 		"align_struct_fields": {
 			"type": "boolean",
 			"default": true,
