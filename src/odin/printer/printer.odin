@@ -53,26 +53,26 @@ Trailing_Comment_Record :: struct {
 }
 
 Config :: struct {
-	character_width:                       int,
-	spaces:                                int, //Spaces per indentation
-	newline_limit:                         int, //The limit of newlines between statements and declarations.
-	tabs:                                  bool, //Enable or disable tabs
-	tabs_width:                            int,
-	convert_do:                            bool, //Convert all do statements to brace blocks
-	brace_style:                           Brace_Style,
-	indent_cases:                          bool,
-	newline_style:                         Newline_Style,
-	sort_imports:                          bool,
-	inline_single_stmt_case:               bool,
-	spaces_around_colons:                  bool, //Put spaces to the left of a colon as well as the right. `foo: bar` => `foo : bar`
-	space_single_line_blocks:              bool,
-	align_struct_fields:                   bool,
-	align_struct_values:                   bool,
-	align_struct_declarations:             bool,
-	align_constant_definitions:            bool,
-	align_comments:                        bool, //Align trailing line comments to the same column.
-	multiline_composite_literals:          bool,
-	remove_empty_lines_at_start_of_blocks: bool,
+	character_width:                              int,
+	spaces:                                       int, //Spaces per indentation
+	newline_limit:                                int, //The limit of newlines between statements and declarations.
+	tabs:                                         bool, //Enable or disable tabs
+	tabs_width:                                   int,
+	convert_do:                                   bool, //Convert all do statements to brace blocks
+	brace_style:                                  Brace_Style,
+	indent_cases:                                 bool,
+	newline_style:                                Newline_Style,
+	sort_imports:                                 bool,
+	inline_single_stmt_case:                      bool,
+	spaces_around_colons:                         bool, //Put spaces to the left of a colon as well as the right. `foo: bar` => `foo : bar`
+	space_single_line_blocks:                     bool,
+	align_struct_fields:                          bool,
+	align_struct_values:                          bool,
+	align_struct_declarations:                    bool,
+	align_constant_definitions:                   bool,
+	align_comments:                               bool, //Align trailing line comments to the same column.
+	multiline_composite_literals:                 bool,
+	remove_empty_lines_at_start_or_end_of_blocks: bool,
 }
 
 Brace_Style :: enum {
@@ -111,43 +111,45 @@ Line_Suffix_Option :: enum {
 
 when ODIN_OS == .Windows {
 	default_style := Config {
-		spaces                       = 4,
-		newline_limit                = 2,
-		convert_do                   = false,
-		tabs                         = true,
-		tabs_width                   = 4,
-		brace_style                  = ._1TBS,
-		indent_cases                 = false,
-		newline_style                = .CRLF,
-		character_width              = 100,
-		sort_imports                 = true,
-		spaces_around_colons         = false,
-		align_struct_fields          = true,
-		align_struct_values          = true,
-		align_struct_declarations    = false,
-		align_constant_definitions   = false,
-		align_comments               = false,
-		multiline_composite_literals = false,
+		spaces                                       = 4,
+		newline_limit                                = 2,
+		remove_empty_lines_at_start_or_end_of_blocks = false,
+		convert_do                                   = false,
+		tabs                                         = true,
+		tabs_width                                   = 4,
+		brace_style                                  = ._1TBS,
+		indent_cases                                 = false,
+		newline_style                                = .CRLF,
+		character_width                              = 100,
+		sort_imports                                 = true,
+		spaces_around_colons                         = false,
+		align_struct_fields                          = true,
+		align_struct_values                          = true,
+		align_struct_declarations                    = false,
+		align_constant_definitions                   = false,
+		align_comments                               = false,
+		multiline_composite_literals                 = false,
 	}
 } else {
 	default_style := Config {
-		spaces                       = 4,
-		newline_limit                = 2,
-		convert_do                   = false,
-		tabs                         = true,
-		tabs_width                   = 4,
-		brace_style                  = ._1TBS,
-		indent_cases                 = false,
-		newline_style                = .LF,
-		character_width              = 100,
-		sort_imports                 = true,
-		spaces_around_colons         = false,
-		align_struct_fields          = true,
-		align_struct_values          = true,
-		align_struct_declarations    = false,
-		align_constant_definitions   = false,
-		align_comments               = false,
-		multiline_composite_literals = false,
+		spaces                                       = 4,
+		newline_limit                                = 2,
+		remove_empty_lines_at_start_or_end_of_blocks = false,
+		convert_do                                   = false,
+		tabs                                         = true,
+		tabs_width                                   = 4,
+		brace_style                                  = ._1TBS,
+		indent_cases                                 = false,
+		newline_style                                = .LF,
+		character_width                              = 100,
+		sort_imports                                 = true,
+		spaces_around_colons                         = false,
+		align_struct_fields                          = true,
+		align_struct_values                          = true,
+		align_struct_declarations                    = false,
+		align_constant_definitions                   = false,
+		align_comments                               = false,
+		multiline_composite_literals                 = false,
 	}
 }
 
