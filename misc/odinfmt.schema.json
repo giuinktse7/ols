@@ -17,10 +17,10 @@
 			"default": 2,
 			"description": "The limit of newlines between statements and declarations."
 		},
-		"remove_empty_lines_at_start_of_blocks": {
+		"remove_empty_lines_at_start_or_end_of_blocks": {
 			"type": "boolean",
 			"default": false,
-			"description": "Remove blank lines immediately after the opening brace of statement blocks, including procedures, if, for, and switch. Preserve blank lines between statements and before closing braces of nonempty blocks."
+			"description": "Remove blank lines immediately after the opening brace or before the closing brace of statement blocks, including procedures, if, for, and switch. Preserve blank lines between statements."
 		},
 		"tabs": {
 			"type": "boolean",

@@ -1013,7 +1013,7 @@ visit_stmt :: proc(
 
 		set_source_position(p, v.pos)
 
-		if p.config.remove_empty_lines_at_start_of_blocks && !v.uses_do {
+		if p.config.remove_empty_lines_at_start_or_end_of_blocks && !v.uses_do {
 			// Advance across only the leading whitespace. This also handles comments,
 			// attributes, and formatting directives without consuming their contents.
 			leading_newlines := 0
@@ -1051,6 +1051,9 @@ visit_stmt :: proc(
 		}
 
 		comment_end, _ := visit_comments(p, tokenizer.Pos{line = v.end.line, offset = v.end.offset})
+		if p.config.remove_empty_lines_at_start_or_end_of_blocks && !v.uses_do {
+			p.source_position.line = max(p.source_position.line, v.end.line - 1)
+		}
 
 		if block_type == .Switch_Stmt && !p.config.indent_cases {
 			document = cons(document, block, comment_end)

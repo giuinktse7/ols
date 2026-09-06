@@ -1,4 +1,4 @@
-package remove_empty_lines_at_start_of_blocks
+package remove_empty_lines_at_start_or_end_of_blocks
 
 main :: proc() {
 
@@ -9,14 +9,17 @@ main :: proc() {
 	if x == 2 {
 
 		x += 1
+
 	} else {
 
 		x -= 1
+
 	}
 
 	for x < 10 {
 
 		x += 1
+
 	}
 
 	switch x {
@@ -24,16 +27,19 @@ main :: proc() {
 	case 10:
 
 		x = 0
+
 	}
 
 	when ODIN_OS == .Windows {
 
 		x = 1
+
 	}
 
 	defer {
 
 		x = 0
+
 	}
 
 	if true {
@@ -41,7 +47,9 @@ main :: proc() {
 		for {
 
 			break
+
 		}
+
 	}
 
 	if true {
@@ -49,11 +57,15 @@ main :: proc() {
 		// Leading comment remains attached to the block.
 
 		x += 1
+
 	}
 
 	if true { // Opening-brace comment
 
 		x += 1
+
+		// Trailing comment remains attached to the block.
+
 	}
 
 	if false {

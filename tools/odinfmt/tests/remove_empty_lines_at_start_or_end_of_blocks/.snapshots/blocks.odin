@@ -1,4 +1,4 @@
-package remove_empty_lines_at_start_of_blocks
+package remove_empty_lines_at_start_or_end_of_blocks
 
 main :: proc() {
 	x := 1
@@ -43,6 +43,8 @@ main :: proc() {
 	if true { 	// Opening-brace comment
 
 		x += 1
+
+		// Trailing comment remains attached to the block.
 	}
 
 	if false {

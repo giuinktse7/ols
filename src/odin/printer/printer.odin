@@ -55,31 +55,31 @@ Trailing_Comment_Record :: struct {
 }
 
 Config :: struct {
-	character_width:                       int,
-	spaces:                                int, //Spaces per indentation
-	newline_limit:                         int, //The limit of newlines between statements and declarations.
-	remove_empty_lines_at_start_of_blocks: bool,
-	tabs:                                  bool, //Enable or disable tabs
-	tabs_width:                            int,
-	convert_do:                            bool, //Convert all do statements to brace blocks
-	preserve_do_mode:                      Preserve_Do_Mode,
-	brace_style:                           Brace_Style,
-	indent_cases:                          bool,
-	newline_style:                         Newline_Style,
-	sort_imports:                          bool,
-	inline_single_stmt_case:               bool,
-	inline_single_stmt_case_mode:          Inline_Single_Stmt_Case_Mode,
-	align_single_stmt_case:                bool,
-	spaces_around_colons:                  bool, //Put spaces to the left of a colon as well as the right. `foo: bar` => `foo : bar`
-	space_single_line_blocks:              bool,
-	closing_brace_on_own_line:             bool,
-	align_struct_fields:                   bool,
-	align_struct_values:                   bool,
-	align_struct_declarations:             bool,
-	align_constant_definitions:            bool,
-	align_comments:                        bool, //Align trailing line comments to the same column.
-	multiline_composite_literals:          bool,
-	preserve_struct_blank_lines:           bool,
+	character_width:                              int,
+	spaces:                                       int, //Spaces per indentation
+	newline_limit:                                int, //The limit of newlines between statements and declarations.
+	remove_empty_lines_at_start_or_end_of_blocks: bool,
+	tabs:                                         bool, //Enable or disable tabs
+	tabs_width:                                   int,
+	convert_do:                                   bool, //Convert all do statements to brace blocks
+	preserve_do_mode:                             Preserve_Do_Mode,
+	brace_style:                                  Brace_Style,
+	indent_cases:                                 bool,
+	newline_style:                                Newline_Style,
+	sort_imports:                                 bool,
+	inline_single_stmt_case:                      bool,
+	inline_single_stmt_case_mode:                 Inline_Single_Stmt_Case_Mode,
+	align_single_stmt_case:                       bool,
+	spaces_around_colons:                         bool, //Put spaces to the left of a colon as well as the right. `foo: bar` => `foo : bar`
+	space_single_line_blocks:                     bool,
+	closing_brace_on_own_line:                    bool,
+	align_struct_fields:                          bool,
+	align_struct_values:                          bool,
+	align_struct_declarations:                    bool,
+	align_constant_definitions:                   bool,
+	align_comments:                               bool, //Align trailing line comments to the same column.
+	multiline_composite_literals:                 bool,
+	preserve_struct_blank_lines:                  bool,
 }
 Preserve_Do_Mode :: enum {
 	Any,
