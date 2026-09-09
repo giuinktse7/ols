@@ -16,6 +16,7 @@
 *node_modules
 /ols
 /odinfmt
+/build/
 tests/tests
 ols.json
 .vscode/
