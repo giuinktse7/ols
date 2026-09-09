@@ -419,10 +419,12 @@ FileSystemWatcher :: struct {
 }
 
 OlsConfig :: struct {
+
 	collections:                             [dynamic]OlsConfigCollection,
 	thread_pool_count:                       Maybe(int),
 	enable_format:                           Maybe(bool),
 	enable_hover:                            Maybe(bool),
+	enable_hover_struct_size_info:           Maybe(bool),
 	enable_document_symbols:                 Maybe(bool),
 	enable_fake_methods:                     Maybe(bool),
 	enable_overload_resolution:              Maybe(bool),
@@ -460,6 +462,7 @@ OlsConfig :: struct {
 	completion_exclude_attributes:           []string,
 	profiles:                                [dynamic]common.ConfigProfile,
 	profile:                                 string,
+
 }
 
 OlsConfigCollection :: struct {

@@ -8,6 +8,14 @@ import "core:slice"
 import "core:strconv"
 import "core:strings"
 
+Case_Alignment_Info :: struct {
+	padding:      ^Document,
+	header_width: int,
+	flat_width:   int,
+	indentation:  int,
+	has_comments: bool,
+}
+
 @(private)
 comment_before_position :: proc(p: ^Printer, pos: tokenizer.Pos) -> bool {
 	if len(p.comments) <= p.latest_comment_index {
@@ -902,20 +910,50 @@ visit_state_flags :: proc(p: ^Printer, flags: ast.Node_State_Flags) -> ^Document
 }
 
 @(private)
-enforce_fit_if_do :: proc(stmt: ^ast.Stmt, document: ^Document) -> ^Document {
-	if block_uses_do(stmt) {
+enforce_fit_if_do :: proc(p: ^Printer, stmt: ^ast.Stmt, document: ^Document) -> ^Document {
+	if block_preserves_do(p, stmt) {
 		return enforce_fit(document)
 	}
 
 	return document
 }
 
-block_uses_do :: proc(stmt: ^ast.Stmt) -> bool {
+block_preserves_do :: proc(p: ^Printer, stmt: ^ast.Stmt) -> bool {
 	if v, ok := stmt.derived.(^ast.Block_Stmt); ok {
-		return v.uses_do
+		return do_block_is_preserved(p, v)
 	}
 
 	return false
+}
+
+@(private)
+do_block_is_preserved :: proc(p: ^Printer, block: ^ast.Block_Stmt) -> bool {
+	if !block.uses_do || p.config.convert_do || len(block.stmts) != 1 {
+		return false
+	}
+
+	return do_stmt_matches_mode(block.stmts[0], p.config.preserve_do_mode)
+}
+
+@(private)
+do_stmt_matches_mode :: proc(stmt: ^ast.Stmt, mode: Preserve_Do_Mode) -> bool {
+	if mode == .Any {
+		return true
+	}
+
+	#partial switch v in stmt.derived {
+	case ^ast.Return_Stmt:
+		return true
+	case ^ast.Branch_Stmt:
+		if mode == .Guard {
+			return v.tok.text == "break" || v.tok.text == "continue"
+		}
+		return mode == .Return_And_Branch || mode == .Simple
+	case ^ast.Assign_Stmt, ^ast.Expr_Stmt, ^ast.Using_Stmt, ^ast.Value_Decl:
+		return mode == .Simple
+	case:
+		return false
+	}
 }
 
 @(private)
@@ -957,7 +995,7 @@ visit_stmt :: proc(
 	case ^ast.Using_Stmt:
 		document = cons(document, cons_with_nopl(text("using"), visit_exprs(p, v.list, {.Add_Comma})))
 	case ^ast.Block_Stmt:
-		uses_do := v.uses_do && !p.config.convert_do
+		uses_do := do_block_is_preserved(p, v)
 		is_single_line := v.open.line == v.end.line
 
 		if v.label != nil {
@@ -975,13 +1013,47 @@ visit_stmt :: proc(
 
 		set_source_position(p, v.pos)
 
+		if p.config.remove_empty_lines_at_start_or_end_of_blocks && !v.uses_do {
+			// Advance across only the leading whitespace. This also handles comments,
+			// attributes, and formatting directives without consuming their contents.
+			leading_newlines := 0
+			for offset := v.pos.offset + 1; offset < len(p.src); offset += 1 {
+				ch := p.src[offset]
+
+				if ch == '\n' {
+					leading_newlines += 1
+				} else if ch != ' ' && ch != '\t' && ch != '\r' {
+					break
+				}
+			}
+
+			p.source_position.line += max(leading_newlines - 1, 0)
+		}
+
 		if p.config.align_constant_definitions {
 			compute_constant_alignment(p, v.stmts)
 		}
 
-		block := visit_block_stmts(p, v.stmts)
+		block_is_nested := !(block_type == .Switch_Stmt && !p.config.indent_cases) && !uses_do
+		if block_is_nested {
+			p.current_indentation += 1
+		}
+
+		block: ^Document
+		if block_type == .Switch_Stmt && p.config.align_single_stmt_case {
+			block = visit_switch_block_stmts(p, v.stmts)
+		} else {
+			block = visit_block_stmts(p, v.stmts)
+		}
+
+		if block_is_nested {
+			p.current_indentation -= 1
+		}
 
 		comment_end, _ := visit_comments(p, tokenizer.Pos{line = v.end.line, offset = v.end.offset})
+		if p.config.remove_empty_lines_at_start_or_end_of_blocks && !v.uses_do {
+			p.source_position.line = max(p.source_position.line, v.end.line - 1)
+		}
 
 		if block_type == .Switch_Stmt && !p.config.indent_cases {
 			document = cons(document, block, comment_end)
@@ -995,7 +1067,13 @@ visit_stmt :: proc(
 			if p.config.space_single_line_blocks && is_single_line {
 				document = cons(document, break_with_no_newline())
 			}
-			document = cons(document, visit_end_brace(p, v.end))
+
+			closing_brace_newline_limit := 0
+			if p.config.closing_brace_on_own_line && !is_single_line {
+				closing_brace_newline_limit = p.config.newline_limit + 1
+			}
+
+			document = cons(document, visit_end_brace(p, v.end, closing_brace_newline_limit))
 		}
 	case ^ast.If_Stmt:
 		if v.label != nil {
@@ -1047,7 +1125,7 @@ visit_stmt :: proc(
 			else_on_newline :=
 				p.config.brace_style == .Allman ||
 				p.config.brace_style == .Stroustrup ||
-				(!p.config.convert_do && block_uses_do(v.body))
+				block_preserves_do(p, v.body)
 			if else_on_newline {
 				document = cons(document, newline(1))
 			}
@@ -1062,9 +1140,7 @@ visit_stmt :: proc(
 
 
 		}
-		if !p.config.convert_do {
-			document = enforce_fit_if_do(v.body, document)
-		}
+		document = enforce_fit_if_do(p, v.body, document)
 	case ^ast.Switch_Stmt:
 		if v.partial {
 			document = cons(document, text("#partial"), break_with_no_newline())
@@ -1103,10 +1179,35 @@ visit_stmt :: proc(
 
 		if count := len(v.body); count > 0 {
 			set_source_position(p, v.body[0].pos)
-			if count == 1 && p.config.inline_single_stmt_case {
-				document = group(nest(cons_with_opl(document, nest(visit_stmt(p, v.body[0])))))
+			if count == 1 &&
+			   p.config.inline_single_stmt_case &&
+			   single_stmt_case_matches_mode(v.body[0], p.config.inline_single_stmt_case_mode) {
+				header_width, header_is_flat := get_flat_document_width(document)
+
+				p.current_indentation += 1
+				body_document := visit_stmt(p, v.body[0])
+				p.current_indentation -= 1
+
+				body_width, body_is_flat := get_flat_document_width(body_document)
+				padding := empty()
+
+				if p.config.align_single_stmt_case && header_is_flat && body_is_flat {
+					p.case_alignment_info[v.pos.offset] = Case_Alignment_Info {
+						padding      = padding,
+						header_width = header_width,
+						flat_width   = header_width + 1 + body_width,
+						indentation  = p.current_indentation,
+						has_comments = case_clause_has_comments(p, v),
+					}
+				}
+
+				document = group(nest(cons(document, padding, break_with_space(), nest(body_document))))
 			} else {
-				document = cons(document, nest(cons(newline(1), visit_block_stmts(p, v.body))))
+				p.current_indentation += 1
+				body_document := visit_block_stmts(p, v.body)
+				p.current_indentation -= 1
+
+				document = cons(document, nest(cons(newline(1), body_document)))
 			}
 		}
 	case ^ast.Type_Switch_Stmt:
@@ -1186,9 +1287,7 @@ visit_stmt :: proc(
 		document = cons_with_nopl(document, visit_stmt(p, v.body))
 		set_source_position(p, v.body.end)
 
-		if !p.config.convert_do {
-			document = enforce_fit_if_do(v.body, document)
-		}
+		document = enforce_fit_if_do(p, v.body, document)
 	case ^ast.Unroll_Range_Stmt:
 		if v.label != nil {
 			document = cons(document, visit_expr(p, v.label), text(":"), break_with_space())
@@ -1211,9 +1310,7 @@ visit_stmt :: proc(
 		document = cons_with_nopl(document, visit_stmt(p, v.body))
 		set_source_position(p, v.body.end)
 
-		if !p.config.convert_do {
-			document = enforce_fit_if_do(v.body, document)
-		}
+		document = enforce_fit_if_do(p, v.body, document)
 	case ^ast.Range_Stmt:
 		if v.label != nil {
 			document = cons(document, visit_expr(p, v.label), text(":"), break_with_space())
@@ -1251,9 +1348,7 @@ visit_stmt :: proc(
 		document = cons_with_nopl(document, visit_stmt(p, v.body))
 		set_source_position(p, v.body.end)
 
-		if !p.config.convert_do {
-			document = enforce_fit_if_do(v.body, document)
-		}
+		document = enforce_fit_if_do(p, v.body, document)
 	case ^ast.Return_Stmt:
 		if v.results == nil {
 			document = cons(document, text("return"))
@@ -1275,11 +1370,7 @@ visit_stmt :: proc(
 			document = cons(document, text("return"))
 
 			if is_return_stmt_ending_with_comp_lit_expr(v.results) {
-				document = cons(
-					document,
-					text(" "),
-					visit_exprs(p, v.results, {.Add_Comma}),
-				)
+				document = cons(document, text(" "), visit_exprs(p, v.results, {.Add_Comma}))
 			} else if !is_return_stmt_ending_with_call_expr(v.results) {
 				document = cons_with_nopl(document, group(nest(visit_exprs(p, v.results, {.Add_Comma, .Group}))))
 			} else {
@@ -1302,7 +1393,7 @@ visit_stmt :: proc(
 			else_on_newline :=
 				p.config.brace_style == .Allman ||
 				p.config.brace_style == .Stroustrup ||
-				(!p.config.convert_do && block_uses_do(v.body))
+				block_preserves_do(p, v.body)
 			if else_on_newline {
 				document = cons(document, newline(1))
 			}
@@ -1316,9 +1407,7 @@ visit_stmt :: proc(
 			}
 		}
 
-		if !p.config.convert_do {
-			document = enforce_fit_if_do(v.body, document)
-		}
+		document = enforce_fit_if_do(p, v.body, document)
 	case ^ast.Branch_Stmt:
 		document = cons(document, text(v.tok.text))
 
@@ -1400,19 +1489,26 @@ contains_comments_in_range :: proc(p: ^Printer, pos: tokenizer.Pos, end: tokeniz
 	return false
 }
 
+Contains_Do_Data :: struct {
+	printer: ^Printer,
+	found:   bool,
+}
+
 @(private)
 contains_do_in_expression :: proc(p: ^Printer, expr: ^ast.Expr) -> bool {
-	found_do := false
+	data := Contains_Do_Data {
+		printer = p,
+	}
 
 	visit_fn :: proc(visitor: ^ast.Visitor, node: ^ast.Node) -> ^ast.Visitor {
 		if node == nil {
 			return nil
 		}
 
-		found_do := cast(^bool)visitor.data
+		data := cast(^Contains_Do_Data)visitor.data
 		if block, ok := node.derived.(^ast.Block_Stmt); ok {
-			if block.uses_do == true {
-				found_do^ = true
+			if do_block_is_preserved(data.printer, block) {
+				data.found = true
 			}
 		}
 
@@ -1420,13 +1516,13 @@ contains_do_in_expression :: proc(p: ^Printer, expr: ^ast.Expr) -> bool {
 	}
 
 	visit := ast.Visitor {
-		data  = &found_do,
+		data  = &data,
 		visit = visit_fn,
 	}
 
 	ast.walk(&visit, expr)
 
-	return found_do
+	return data.found
 }
 
 @(private)
@@ -1780,10 +1876,8 @@ visit_expr :: proc(
 		contains_comments := contains_comments_in_range(p, v.open, v.close)
 		contains_do := false
 
-		if !p.config.convert_do {
-			for arg in v.args {
-				contains_do |= contains_do_in_expression(p, arg)
-			}
+		for arg in v.args {
+			contains_do |= contains_do_in_expression(p, arg)
 		}
 
 		if is_call_expr_nestable(v.args) {
@@ -2083,6 +2177,180 @@ visit_block_stmts :: proc(p: ^Printer, stmts: []^ast.Stmt) -> ^Document {
 	return document
 }
 
+@(private)
+single_stmt_case_matches_mode :: proc(stmt: ^ast.Stmt, mode: Inline_Single_Stmt_Case_Mode) -> bool {
+	if mode == .Any {
+		return true
+	}
+
+	#partial switch _ in stmt.derived {
+	case ^ast.Return_Stmt:
+		return true
+	case ^ast.Branch_Stmt:
+		return mode == .Return_And_Branch || mode == .Simple
+	case ^ast.Assign_Stmt, ^ast.Expr_Stmt, ^ast.Using_Stmt, ^ast.Value_Decl:
+		return mode == .Simple
+	case:
+		return false
+	}
+}
+
+@(private)
+get_flat_document_width :: proc(document: ^Document) -> (width: int, is_flat: bool) {
+	#partial switch v in document {
+	case Document_Nil, Document_Line_Suffix:
+		return 0, true
+	case Document_Newline:
+		return 0, v.amount == 0
+	case Document_Text:
+		return len(v.value), true
+	case Document_Nest:
+		return get_flat_document_width(v.document)
+	case Document_Break:
+		return len(v.value), true
+	case Document_Group:
+		if v.mode == .Break {
+			return 0, false
+		}
+
+		return get_flat_document_width(v.document)
+	case Document_Cons:
+		width := 0
+
+		for element in v.elements {
+			element_width, element_is_flat := get_flat_document_width(element)
+
+			if !element_is_flat {
+				return 0, false
+			}
+
+			width += element_width
+		}
+
+		return width, true
+	case Document_If_Break_Or:
+		if v.fit_document == nil {
+			return 0, true
+		}
+
+		return get_flat_document_width(v.fit_document)
+	case Document_Align:
+		return get_flat_document_width(v.document)
+	case Document_Break_Parent:
+		return 0, false
+	}
+
+	return 0, false
+}
+
+@(private)
+case_clause_has_comments :: proc(p: ^Printer, clause: ^ast.Case_Clause) -> bool {
+	for group in p.comments {
+		for comment in group.list {
+			if clause.pos.line <= comment.pos.line && comment.pos.line <= clause.end.line {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+@(private)
+comments_between_stmts :: proc(p: ^Printer, previous, current: ^ast.Stmt) -> bool {
+	for group in p.comments {
+		for comment in group.list {
+			if previous.pos.offset < comment.pos.offset && comment.pos.offset < current.pos.offset {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+@(private)
+align_case_info_run :: proc(p: ^Printer, infos: []Case_Alignment_Info) {
+	if len(infos) < 2 {
+		return
+	}
+
+	target_width := 0
+	for info in infos {
+		target_width = max(target_width, info.header_width)
+	}
+
+	// Padding can make a previously fitting case exceed character_width. Such a case
+	// remains unaligned and divides the cases on either side into independent groups.
+	for info, i in infos {
+		padding := target_width - info.header_width
+		line_width := info.indentation * p.indentation_width + info.flat_width + padding
+
+		if line_width >= p.config.character_width {
+			info.padding^ = Document_Break_Parent{}
+
+			align_case_info_run(p, infos[:i])
+			align_case_info_run(p, infos[i + 1:])
+			return
+		}
+	}
+
+	for info in infos {
+		padding := target_width - info.header_width
+		if padding > 0 {
+			info.padding^ = Document_Text {
+				value = strings.repeat(" ", padding),
+			}
+		}
+	}
+}
+
+@(private)
+visit_switch_block_stmts :: proc(p: ^Printer, stmts: []^ast.Stmt) -> ^Document {
+	document := empty()
+	run := make([dynamic]Case_Alignment_Info, p.allocator)
+	previous_stmt: ^ast.Stmt
+
+	for stmt, i in stmts {
+		last_index := max(0, i - 1)
+		if stmts[last_index].end.line == stmt.pos.line && i != 0 && stmt.pos.line not_in p.disabled_lines {
+			document = group(cons(document, break_with("; ")))
+		}
+
+		stmt_document := visit_stmt(p, stmt, .Generic, false, true)
+		if p.force_statement_fit {
+			stmt_document = enforce_fit(stmt_document)
+		}
+
+		document = cons(document, stmt_document)
+
+		info, has_info := p.case_alignment_info[stmt.pos.offset]
+		fits_without_alignment :=
+			has_info &&
+			!info.has_comments &&
+			info.indentation * p.indentation_width + info.flat_width < p.config.character_width
+
+		continues_run :=
+			fits_without_alignment &&
+			len(run) > 0 &&
+			previous_stmt != nil &&
+			stmt.pos.line <= previous_stmt.end.line + 1 &&
+			!comments_between_stmts(p, previous_stmt, stmt)
+
+		if !continues_run && len(run) > 0 {
+			align_case_info_run(p, run[:])
+			clear(&run)
+		}
+
+		if fits_without_alignment {
+			append(&run, info)
+		}
+
+		previous_stmt = stmt
+	}
+
+	align_case_info_run(p, run[:])
+	return document
+}
+
 List_Option :: enum u8 {
 	Add_Comma,
 	Trailing,
@@ -2100,16 +2368,28 @@ visit_struct_field_list :: proc(p: ^Printer, list: ^ast.Field_List, options := L
 		return document
 	}
 
-	declaration_alignment := 0
-	if p.config.align_struct_declarations && .Enforce_Newline in options {
-		declaration_alignment = get_possible_field_declaration_alignment(list.list)
-	}
+	// Declaration alignment (align_struct_declarations) takes precedence: it pads before the colon,
+	// while field-type alignment pads after it.
+	align_declarations := p.config.align_struct_declarations
+	align_field_types := p.config.align_struct_fields && !align_declarations
+
+	multiline_alignment_enabled := .Enforce_Newline in options && (align_field_types || align_declarations)
+
+	section_name_width := 0
+	// section_end is exclusive. Reaching it starts the next alignment group.
+	section_end := 0
 
 	for field, i in list.list {
 		align := empty()
 		declaration_align := empty()
 
 		p.source_position = field.pos
+
+		// Initialize alignment for the first section and update it at each section boundary.
+		if multiline_alignment_enabled && i == section_end {
+			section_end = get_struct_field_alignment_section_end(p, list.list, i)
+			section_name_width = get_max_struct_field_name_width(list.list[i:section_end])
+		}
 
 		// A field is neither a Decl nor a Stmt, so it reaches neither place that consults
 		// disabled_lines and the region has to be emitted here. Its text already carries the
@@ -2147,46 +2427,14 @@ visit_struct_field_list :: proc(p: ^Printer, list: ^ast.Field_List, options := L
 		name_options := List_Options{.Add_Comma}
 
 		if (.Enforce_Newline in options) {
-			// When align_struct_declarations is active, it handles the visual
-			if p.config.align_struct_fields && !p.config.align_struct_declarations {
-				alignment := get_possible_field_alignment(list.list)
-
-				if alignment > 0 {
-					length := 0
-					for name in field.names {
-						length += get_node_length(name)
-					}
-					if len(field.names) > 1 {
-						length += 2 * (len(field.names) - 1)
-					}
-					if .Using in field.flags {
-						length += 6
-					}
-					if .Subtype in field.flags {
-						length += 9
-					}
-					align = repeat_space(alignment - length)
-				}
+			if align_field_types && section_name_width > 0 {
+				align = repeat_space(section_name_width - get_struct_field_name_width(field))
 			}
 
-			if p.config.align_struct_declarations && declaration_alignment > 0 {
-				name_length := 0
-				for name in field.names {
-					name_length += get_node_length(name)
-				}
-				if len(field.names) > 1 {
-					name_length += 2 * (len(field.names) - 1)
-				}
-
-				if .Using in field.flags {
-					name_length += 6
-				}
-				if .Subtype in field.flags {
-					name_length += 9
-				}
-
-				if name_length > 0 && name_length < declaration_alignment {
-					declaration_align = repeat_space(declaration_alignment - name_length)
+			if align_declarations && section_name_width > 0 {
+				name_width := get_struct_field_name_width(field)
+				if name_width > 0 && name_width < section_name_width {
+					declaration_align = repeat_space(section_name_width - name_width)
 				}
 			}
 
@@ -2219,8 +2467,12 @@ visit_struct_field_list :: proc(p: ^Printer, list: ^ast.Field_List, options := L
 		}
 
 		if i != len(list.list) - 1 && .Enforce_Newline in options {
-			comment, _ := visit_comments(p, list.list[i + 1].pos)
-			document = cons(document, comment, newline(1))
+			if p.config.preserve_struct_blank_lines {
+				document = cons(document, move_line(p, list.list[i + 1].pos))
+			} else {
+				comment, _ := visit_comments(p, list.list[i + 1].pos)
+				document = cons(document, comment, newline(1))
+			}
 		} else {
 			comment, _ := visit_comments(p, list.end)
 			document = cons(document, comment)
@@ -2576,52 +2828,70 @@ get_node_length :: proc(node: ^ast.Node) -> int {
 }
 
 @(private)
-get_possible_field_alignment :: proc(fields: []^ast.Field) -> int {
-	longest_name := 0
+struct_fields_have_blank_line_between :: proc(previous, next: ^ast.Field) -> bool {
+	last_occupied_line := previous.end.line
 
-	for field in fields {
-		length := 0
-		for name in field.names {
-			length += get_node_length(name)
-		}
-
-		if len(field.names) > 1 {
-			length += 2 * (len(field.names) - 1)
-		}
-
-		if .Using in field.flags {
-			length += 6
-		}
-
-		longest_name = max(longest_name, length)
+	if previous.comment != nil {
+		last_occupied_line = max(last_occupied_line, previous.comment.end.line)
 	}
 
-	return longest_name
+	if next.docs != nil {
+		if next.docs.pos.line > last_occupied_line + 1 {
+			return true
+		}
+
+		last_occupied_line = max(last_occupied_line, next.docs.end.line)
+	}
+
+	return next.pos.line > last_occupied_line + 1
 }
 
 @(private)
-get_possible_field_declaration_alignment :: proc(fields: []^ast.Field) -> int {
+get_struct_field_alignment_section_end :: proc(p: ^Printer, fields: []^ast.Field, start: int) -> int {
+	if !p.config.preserve_struct_blank_lines {
+		return len(fields)
+	}
+
+	// With a zero limit, source blank lines are collapsed in the output. They must
+	// not reset alignment when there is no visible section break.
+	if p.config.newline_limit <= 0 {
+		return len(fields)
+	}
+
+	end := start + 1
+	for end < len(fields) && !struct_fields_have_blank_line_between(fields[end - 1], fields[end]) {
+		end += 1
+	}
+
+	return end
+}
+
+@(private)
+get_struct_field_name_width :: proc(field: ^ast.Field) -> int {
+	width := 0
+	for name, i in field.names {
+		width += get_node_length(name)
+		if i < len(field.names) - 1 {
+			width += 2 // ", "
+		}
+	}
+
+	if .Using in field.flags {
+		width += 6 // "using "
+	}
+	if .Subtype in field.flags {
+		width += 9 // "#subtype "
+	}
+
+	return width
+}
+
+@(private)
+get_max_struct_field_name_width :: proc(fields: []^ast.Field) -> int {
 	longest_name := 0
 
 	for field in fields {
-		length := 0
-		for name in field.names {
-			length += get_node_length(name)
-		}
-
-		if len(field.names) > 1 {
-			length += 2 * (len(field.names) - 1)
-		}
-
-		if .Using in field.flags {
-			length += 6 // "using "
-		}
-
-		if .Subtype in field.flags {
-			length += 9 // "#subtype "
-		}
-
-		longest_name = max(longest_name, length)
+		longest_name = max(longest_name, get_struct_field_name_width(field))
 	}
 
 	return longest_name

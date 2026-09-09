@@ -17,6 +17,11 @@
 			"default": 2,
 			"description": "The limit of newlines between statements and declarations."
 		},
+		"remove_empty_lines_at_start_or_end_of_blocks": {
+			"type": "boolean",
+			"default": false,
+			"description": "Remove blank lines immediately after the opening brace or before the closing brace of statement blocks, including procedures, if, for, and switch. Preserve blank lines between statements."
+		},
 		"tabs": {
 			"type": "boolean",
 			"default": true,
@@ -31,6 +36,12 @@
 			"type": "boolean",
 			"default": false,
 			"description": "Convert all do statements to brace blocks"
+		},
+		"preserve_do_mode": {
+			"type": "string",
+			"enum": ["Return", "Guard", "Return_And_Branch", "Simple", "Any"],
+			"default": "Any",
+			"description": "Select which do statement bodies are preserved; Guard permits return, break, and continue. Other do bodies are converted to brace blocks. convert_do overrides this setting"
 		},
 		"brace_style": {
 			"type": "string",
@@ -49,7 +60,18 @@
 		"inline_single_stmt_case": {
 			"type": "boolean",
 			"default": false,
-			"description": "When statement in the clause contains one simple statement, it will inline the case and statement in one line"
+			"description": "When a case clause contains one statement allowed by inline_single_stmt_case_mode, inline the case and statement when they fit"
+		},
+		"inline_single_stmt_case_mode": {
+			"type": "string",
+			"enum": ["Return", "Return_And_Branch", "Simple", "Any"],
+			"default": "Any",
+			"description": "Select which single statements may be inlined. Any preserves the legacy behavior"
+		},
+		"align_single_stmt_case": {
+			"type": "boolean",
+			"default": false,
+			"description": "Align statements in consecutive inline single-statement cases while respecting character_width"
 		},
 		"spaces_around_colons": {
 			"type": "boolean",
@@ -65,6 +87,11 @@
 			"type": "boolean",
 			"default": false,
 			"description": "Put spaces around braces of single-line blocks: `{return 0}` => `{ return 0 }`"
+		},
+		"closing_brace_on_own_line": {
+			"type": "boolean",
+			"default": false,
+			"description": "Put the closing brace of a multiline statement block on its own line"
 		},
 		"align_struct_fields": {
 			"type": "boolean",
@@ -95,6 +122,11 @@
 			"type": "boolean",
 			"default": false,
 			"description": "Composite literals that span multiple lines are not forcibly inlined"
+		},
+		"preserve_struct_blank_lines": {
+			"type": "boolean",
+			"default": false,
+			"description": "Preserve blank lines between struct fields, up to newline_limit"
 		}
 	},
 	"required": []

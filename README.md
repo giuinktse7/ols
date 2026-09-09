@@ -173,6 +173,8 @@ Options:
 
 - `convert_do`: Convert all do statements to brace blocks.
 
+- `preserve_do_mode`: Select which `do` statement bodies are preserved. `Return` permits only return statements; `Guard` permits `return`, `break`, and `continue`; `Return_And_Branch` also permits `fallthrough`; `Simple` also permits assignments, declarations, using statements, and expression statements; `Any` preserves every `do` statement. Other bodies are converted to brace blocks. Defaults to `Any`; `convert_do` overrides this setting.
+
 - `brace_style`: Style of braces. One of `_1TBS`, `Allman`, `Stroustrup`, `K_And_R`.
 
 - `indent_cases`: Indent case statements within a switch.
@@ -181,11 +183,17 @@ Options:
 
 - `sort_imports`: A boolean that defaults to true, which can be set to false to disable sorting imports.
 
-- `inline_single_stmt_case`: When statement in the clause contains one simple statement, it will inline the case and statement in one line.
+- `inline_single_stmt_case`: When a case clause contains one statement allowed by `inline_single_stmt_case_mode`, inline the case and statement when they fit.
+
+- `inline_single_stmt_case_mode`: Select which single statements may be inlined. `Return` permits only return statements; `Return_And_Branch` also permits `break`, `continue`, and `fallthrough`; `Simple` also permits assignments, declarations, using statements, and expression statements; `Any` permits every statement and preserves the legacy behavior. Defaults to `Any`.
+
+- `align_single_stmt_case`: Align statements in consecutive inline single-statement cases while respecting `character_width`.
 
 - `spaces_around_colons`: Put a space on both sides of a single colon during variable/field declaration, such as `foo : bar`
 
 - `space_single_line_blocks`: Put spaces around braces of single-line blocks: `{return 0}` => `{ return 0 }`
+
+- `closing_brace_on_own_line`: Put the closing brace of a multiline statement block on its own line.
 
 - `align_struct_fields`: Align the types of struct fields so they all start at the same column.
 
@@ -194,6 +202,8 @@ Options:
 - `align_comments`: Align trailing line comments on consecutive lines so they all start at the same column. The alignment resets on a blank line, a line without a trailing comment, or a change in indentation. Standalone comment lines and `/* */` block comments are not aligned.
 
 - `multiline_composite_literals`: When enabled, composite literals that were written across multiple lines are kept multiline.
+
+- `preserve_struct_blank_lines`: Preserve blank lines between struct fields, up to `newline_limit`.
 
 ## Features
 

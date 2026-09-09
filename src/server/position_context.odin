@@ -648,6 +648,7 @@ get_document_position_node :: proc(node: ^ast.Node, position_context: ^DocumentP
 		get_document_position(n.expr, position_context)
 	case ^ast.Call_Expr:
 		position_context.call = n
+		position_context.call_arg = nil
 		get_document_position(n.expr, position_context)
 		for arg in n.args {
 			if position_in_node(arg, position_context.position) {

@@ -1,0 +1,6 @@
+{
+	"character_width": 60,
+	"inline_single_stmt_case": true,
+	"inline_single_stmt_case_mode": "Return",
+	"align_single_stmt_case": true
+}
