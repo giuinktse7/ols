@@ -3,6 +3,14 @@
 
 VERSION="dev-$(date -u '+%Y-%m-%d')-$(git rev-parse --short HEAD)"
 
+case "$(uname -s)" in
+    Linux*)  TARGET="linux" ;;
+    Darwin*) TARGET="darwin" ;;
+    *)       TARGET="$(uname -s | tr '[:upper:]' '[:lower:]')" ;;
+esac
+
+BUILD_DIR="build/$TARGET"
+
 if [[ $1 == "single_test" ]]
 then
     shift
@@ -63,8 +71,10 @@ if [[ $1 == "debug" ]]
 then
     shift
 
-    odin build src/ -show-timings -collection:src=src -out:ols -microarch:native -no-bounds-check -use-separate-modules -define:VERSION=$VERSION-debug -debug $@
+    mkdir -p "$BUILD_DIR"
+    odin build src/ -show-timings -collection:src=src -out:"$BUILD_DIR/ols" -microarch:native -no-bounds-check -use-separate-modules -define:VERSION=$VERSION-debug -debug $@
     exit 0
 fi
 
-odin build src/ -show-timings -collection:src=src -out:ols -microarch:native -no-bounds-check -o:speed -define:VERSION=$VERSION $@
+mkdir -p "$BUILD_DIR"
+odin build src/ -show-timings -collection:src=src -out:"$BUILD_DIR/ols" -microarch:native -no-bounds-check -o:speed -define:VERSION=$VERSION $@
