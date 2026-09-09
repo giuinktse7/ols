@@ -528,6 +528,9 @@ resolve_node :: proc(node: ^ast.Node, data: ^FileResolveData) {
 		resolve_node(r.stmt, data)
 	case ^ast.Return_Stmt:
 		data.position_context.returns = n
+		defer {
+			data.position_context.returns = nil
+		}
 		resolve_nodes(n.results, data)
 	case ^ast.Defer_Stmt:
 		resolve_node(n.stmt, data)

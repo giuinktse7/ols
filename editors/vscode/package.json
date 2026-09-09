@@ -7,7 +7,7 @@
 		"type": "git",
 		"url": "git://github.com/DanielGavin/ols.git"
 	},
-	"version": "0.1.44",
+	"version": "0.1.47",
 	"engines": {
 		"vscode": "^1.96.0"
 	},
@@ -57,6 +57,11 @@
 					"type": "boolean",
 					"default": true,
 					"description": "Whether to ask for permission before downloading any files from the Internet."
+				},
+				"ols.updates.checkOnStartup": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "Whether to check for a new nightly release of the language server on startup. The check is skipped when `#ols.server.path#` is set, and is at most done once an hour."
 				},
 				"ols.server.path": {
 					"type": [

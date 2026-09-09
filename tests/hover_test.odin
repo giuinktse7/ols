@@ -7405,3 +7405,19 @@ ast_hover_pointer_from_untyped_variable :: proc(t: ^testing.T) {
 	}
 	test.expect_hover(t, &source, "test.b: ^int")
 }
+
+@(test)
+ast_hover_for_index_from_variable :: proc(t: ^testing.T) {
+	source := test.Source {
+		main     = `package test
+		FOO :: len([2]int)
+		bar: [FOO]struct{}
+
+		main :: proc() {
+			for b, i{*} in bar {}
+		}
+		`,
+		packages = {},
+	}
+	test.expect_hover(t, &source, "test.i: int")
+}

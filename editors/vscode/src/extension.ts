@@ -27,6 +27,9 @@ import { watchOlsConfigFile } from './watch';
 
 const onDidChange: vscode.EventEmitter<void> = new vscode.EventEmitter<void>();
 
+/** How long to wait between two nightly update checks. */
+const updateCheckInterval = 60 * 60 * 1000;
+
 const JSON5 = require('json5')
 
 const defaultConfig = JSON.stringify(
@@ -63,7 +66,9 @@ export async function activate(context: vscode.ExtensionContext) {
 		throw new Error(message);
 	});
 
-	checkForUpdates(config, state, false)
+	if (shouldCheckForUpdates(config, state)) {
+		checkForUpdates(config, state, false);
+	}
 
 
 	const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -380,14 +385,38 @@ async function getServer(config: Config, state: PersistentState): Promise<string
 	return destExecutable
 }
 
+function shouldCheckForUpdates(config: Config, state: PersistentState): boolean {
+	if (serverPath(config)) {
+		return false;
+	}
+
+	if (!config.checkUpdatesOnStartup) {
+		return false;
+	}
+
+	const lastCheck = state.lastCheck;
+
+	if (lastCheck === undefined) {
+		return true;
+	}
+
+	const elapsed = Date.now() - lastCheck;
+
+	// a negative elapsed time means the clock moved backwards, in which case we check right away
+	return elapsed >= updateCheckInterval || elapsed < 0;
+}
+
 async function checkForUpdates(config: Config, state: PersistentState, required: boolean): Promise<void> {
 	const platform = getPlatform()
+
+	// record the attempt before making it, so a failing request doesn't get retried on every activation
+	await state.updateLastCheck(Date.now());
+
 	const release = await downloadWithRetryDialog(state, required, async () => {
 		return await fetchRelease("nightly", state.githubToken, config.httpProxy);
 	});
 
 	if (release === undefined || release.id === state.releaseId) {
-		await state.updateLastCheck(Date.now());
 		return;
 	}
 
@@ -440,7 +469,6 @@ async function checkForUpdates(config: Config, state: PersistentState, required:
 
 	await state.updateServerVersion(config.package.version);
 	await state.updateReleaseId(release.id);
-	await state.updateLastCheck(Date.now());
 	await vscode.commands.executeCommand("workbench.action.reloadWindow");
 
 	return;
