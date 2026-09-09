@@ -8,6 +8,7 @@ Note: This project is made to be up to date with the master branch of Odin.
 
 ## Table Of Contents
 
+-   [Patches in this fork](#patches-in-this-fork)
 -   [Installation](#installation)
 	-   [Configuration](#Configuration)
 -   [Features](#features)
@@ -19,6 +20,24 @@ Note: This project is made to be up to date with the master branch of Odin.
 	-   [Emacs](#emacs)
 	-   [Helix](#helix)
 	-   [Micro](#micro)
+
+## Patches in this fork
+
+This fork's `master` branch carries the following patches on top of upstream OLS. The linked feature branches retain the individual patch histories; related formatter patches are combined on `master`.
+
+| Patch | Behavior |
+| --- | --- |
+| [`feat/better-named-arg-param-completion`](https://github.com/giuinktse7/ols/tree/feat/better-named-arg-param-completion) | Completes unused procedure parameter names as named arguments, including in nested calls and partially edited argument lists. Existing named and positional arguments are accounted for when choosing suggestions. |
+| [`feat/closing-brace-on-own-line`](https://github.com/giuinktse7/ols/tree/feat/closing-brace-on-own-line) | Introduces the opt-in odinfmt `closing_brace_on_own_line` setting. |
+| [`feat/enable-checks-for-test-files`](https://github.com/giuinktse7/ols/tree/feat/enable-checks-for-test-files) | Checks a package in both normal and `-build-mode:test` modes when it contains a file tagged with `#+test`, then deduplicates diagnostics from the two runs. |
+| [`feat/odinfmt-closing-brace-layout`](https://github.com/giuinktse7/ols/tree/feat/odinfmt-closing-brace-layout) | Refines the closing-brace layout so multiline statement blocks end with the brace on its own line while single-line blocks stay compact. |
+| [`feat/odinfmt-inline-switch-cases`](https://github.com/giuinktse7/ols/tree/feat/odinfmt-inline-switch-cases) | Adds configurable inlining and optional alignment for consecutive single-statement switch cases, bounded by `character_width`. |
+| [`feat/odinfmt-remove-empty-block-boundary-lines`](https://github.com/giuinktse7/ols/tree/feat/odinfmt-remove-empty-block-boundary-lines) | Extends block cleanup to both boundaries through `remove_empty_lines_at_start_or_end_of_blocks`, without removing blank lines between statements. |
+| [`feat/preserve-do-mode`](https://github.com/giuinktse7/ols/tree/feat/preserve-do-mode) | Adds `preserve_do_mode`, which controls which kinds of single-statement `do` bodies remain in `do` form. |
+| [`feat/preserve-struct-blank-lines`](https://github.com/giuinktse7/ols/tree/feat/preserve-struct-blank-lines) | Adds `preserve_struct_blank_lines` and keeps field alignment scoped to sections separated by preserved blank lines. |
+| [`feat/remove-empty-lines-at-start-of-blocks`](https://github.com/giuinktse7/ols/tree/feat/remove-empty-lines-at-start-of-blocks) | Adds the original opt-in formatter behavior for removing blank lines immediately after a statement block's opening brace. This is superseded on `master` by the block-boundary patch above. |
+| [`feat/struct-size-info-on-hover`](https://github.com/giuinktse7/ols/tree/feat/struct-size-info-on-hover) | Adds opt-in struct size, padding, and alignment details to hover output. Layouts are omitted when they cannot be resolved safely or the configured checker target differs from the server target. |
+| [`feat/switch-case-inlining-policy`](https://github.com/giuinktse7/ols/tree/feat/switch-case-inlining-policy) | Adds `inline_single_stmt_case_mode` policies ranging from return-only cases to the legacy `Any` behavior. |
 
 ## Installation
 
@@ -74,6 +93,8 @@ Options:
 - `enable_format`: Turns on formatting with `odinfmt`. _(Enabled by default)_
 
 - `enable_hover`: Enables hover feature. _(Enabled by default)_
+
+- `enable_hover_struct_size_info`: Add struct size, padding, and alignment information to hover output when the layout can be resolved for the server target. _(Disabled by default)_
 
 - `enable_document_symbols`: Turns on outline of all your global declarations in your document. _(Enabled by default)_
 
@@ -166,6 +187,8 @@ Options:
 - `spaces`: How many spaces is in one indentation.
 
 - `newline_limit`: The limit of newlines between statements and declarations.
+
+- `remove_empty_lines_at_start_or_end_of_blocks`: Remove blank lines immediately after an opening brace or before a closing brace while preserving blank lines between statements. _(Disabled by default)_
 
 - `tabs`: Tabs or spaces.
 
