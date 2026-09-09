@@ -192,6 +192,56 @@ CheckProcess :: struct {
 	buffer:   [dynamic]u8,
 }
 
+Check_Target :: struct {
+	path:      string,
+	test_mode: bool,
+}
+
+source_has_test_tag :: proc(source: string) -> bool {
+	it := source
+	for line in strings.split_lines_iterator(&it) {
+		trimmed := strings.trim_space(line)
+
+		if strings.has_prefix(trimmed, "#+test") {
+			return true
+		}
+
+		if strings.has_prefix(trimmed, "package ") {
+			break
+		}
+	}
+
+	return false
+}
+
+check_file_has_test_tag :: proc(file_path: string) -> bool {
+	data, err := os.read_entire_file(file_path, context.temp_allocator)
+	if err != nil {
+		return false
+	}
+
+	return source_has_test_tag(string(data))
+}
+
+check_path_has_test_file :: proc(check_path: string) -> bool {
+	if filepath.ext(check_path) == ".odin" {
+		return check_file_has_test_tag(check_path)
+	}
+
+	matches, err := filepath.glob(fmt.tprintf("%v/*.odin", check_path), context.temp_allocator)
+	if err != nil {
+		return false
+	}
+
+	for file_path in matches {
+		if check_file_has_test_tag(file_path) {
+			return true
+		}
+	}
+
+	return false
+}
+
 check :: proc(mode: Check_Mode, check_paths: []string, config: ^common.Config) {
 	paths := resolve_check_paths(mode, check_paths, config)
 
@@ -210,18 +260,28 @@ check :: proc(mode: Check_Mode, check_paths: []string, config: ^common.Config) {
 		append(&collections, fmt.aprintf("-collection:%v=%v", k, v))
 	}
 
-	max_concurrent_checks := max(1, os.get_processor_core_count())
-	processes := make([dynamic]CheckProcess, 0, len(paths))
+	targets := make([dynamic]Check_Target, 0, len(paths) * 2, context.temp_allocator)
+	for check_path in paths {
+		append(&targets, Check_Target{path = check_path})
 
-	errors := make([dynamic]Json_Errors, 0, len(paths), context.temp_allocator)
+		if check_path_has_test_file(check_path) {
+			append(&targets, Check_Target{path = check_path, test_mode = true})
+		}
+	}
+
+	max_concurrent_checks := max(1, os.get_processor_core_count())
+	processes := make([dynamic]CheckProcess, 0, len(targets))
+
+	errors := make([dynamic]Json_Errors, 0, len(targets), context.temp_allocator)
 
 	next_index := 0
 	running_count := 0
 	start := time.now()
 
-	for running_count > 0 || next_index < len(paths) {
-		for running_count < max_concurrent_checks && next_index < len(paths) {
-			p, ok := start_check_process(paths[next_index], collections[:], config)
+	for running_count > 0 || next_index < len(targets) {
+		for running_count < max_concurrent_checks && next_index < len(targets) {
+			target := targets[next_index]
+			p, ok := start_check_process(target.path, collections[:], config, target.test_mode)
 			next_index += 1
 			if !ok {
 				continue
@@ -293,7 +353,7 @@ check :: proc(mode: Check_Mode, check_paths: []string, config: ^common.Config) {
 			}
 		}
 
-		if running_count > 0 || next_index < len(paths) {
+		if running_count > 0 || next_index < len(targets) {
 			time.sleep(1 * time.Millisecond)
 		}
 	}
@@ -366,15 +426,13 @@ check :: proc(mode: Check_Mode, check_paths: []string, config: ^common.Config) {
 	}
 
 }
-@(private = "file")
-start_check_process :: proc(
+
+build_check_command :: proc(
 	check_path: string,
 	collections: []string,
 	config: ^common.Config,
-) -> (
-	CheckProcess,
-	bool,
-) {
+	test_mode: bool,
+) -> [dynamic]string {
 	command: string
 
 	if config.odin_command != "" {
@@ -393,12 +451,31 @@ start_check_process :: proc(
 		append(&cmd, fmt.tprintf("-define:%s=%s", k, v))
 	}
 	append(&cmd, entry_point_opt, "-json-errors")
+
+	if test_mode {
+		append(&cmd, "-build-mode:test")
+	}
+	
 	args, _ := strings.split(config.checker_args, " ", context.temp_allocator)
 	for arg in args {
 		if arg != "" {
 			append(&cmd, arg)
 		}
 	}
+	return cmd
+}
+
+@(private = "file")
+start_check_process :: proc(
+	check_path: string,
+	collections: []string,
+	config: ^common.Config,
+	test_mode: bool,
+) -> (
+	CheckProcess,
+	bool,
+) {
+	cmd := build_check_command(check_path, collections, config, test_mode)
 
 	r, w, err := os.pipe()
 	if err != nil {
