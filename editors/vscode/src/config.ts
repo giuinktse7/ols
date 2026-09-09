@@ -41,6 +41,8 @@ export class Config {
 
 	get askBeforeDownload() { return this.get<boolean>("updates.askBeforeDownload"); }
 
+	get checkUpdatesOnStartup() { return this.get<boolean>("updates.checkOnStartup"); }
+
 	get debugEngine() { return this.get<string>("debug.engine"); }
 
     get askCreateOLS() {  return this.get<boolean>("prompt.AskCreateOLS"); }
