@@ -68,6 +68,7 @@ Config :: struct {
 
 	// Blocks and braces
 	brace_style:                                  Brace_Style,
+	multiline_call_style:                         Multiline_Call_Style,
 	space_single_line_blocks:                     bool,
 	closing_brace_on_own_line:                    bool,
 	remove_empty_lines_at_start_or_end_of_blocks: bool,
@@ -101,6 +102,11 @@ Preserve_Do_Mode :: enum {
 	Return_And_Branch,
 	Guard,
 	Return,
+}
+
+Multiline_Call_Style :: enum {
+	Default,
+	Block_Arguments,
 }
 
 Inline_Single_Stmt_Case_Mode :: enum {
@@ -159,6 +165,7 @@ when ODIN_OS == .Windows {
 
 		// Blocks and braces
 		brace_style                                  = ._1TBS,
+		multiline_call_style                         = .Default,
 		closing_brace_on_own_line                    = false,
 		remove_empty_lines_at_start_or_end_of_blocks = false,
 
@@ -198,6 +205,7 @@ when ODIN_OS == .Windows {
 
 		// Blocks and braces
 		brace_style                                  = ._1TBS,
+		multiline_call_style                         = .Default,
 		closing_brace_on_own_line                    = false,
 		remove_empty_lines_at_start_or_end_of_blocks = false,
 
