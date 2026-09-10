@@ -8,7 +8,7 @@ main :: proc() {
 		{
 			flags  = {.Pointer_Input, .Text_Focusable, .Blocks_World_Input},
 			cursor = .Text,
-		}
+		},
 	)
 
 	build(prefix, {width = 100}, callback, timeout, allocator)
@@ -16,13 +16,13 @@ main :: proc() {
 			first  = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,
 			second = bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,
 		},
-		callback
+		callback,
 	)
 
 	build(prefix, {
 			width = 100,
 		},
-		callback, timeout, allocator
+		callback, timeout, allocator,
 	)
 
 	append(&items, Item {
@@ -33,7 +33,7 @@ main :: proc() {
 	configure(prefix, layout = {
 			width = 100,
 		},
-		callback
+		callback,
 	)
 
 	slice.sort_by(items, proc(a, b: Item) -> bool {

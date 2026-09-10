@@ -52,7 +52,7 @@
 			"type": "string",
 			"enum": ["Default", "Block_Arguments"],
 			"default": "Default",
-			"description": "Format calls containing a non-final multiline composite literal using block argument indentation and boundaries"
+			"description": "Format calls containing a non-final multiline composite literal using block argument indentation, boundaries, and a trailing call comma"
 		},
 		"indent_cases": {
 			"type": "boolean",

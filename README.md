@@ -200,7 +200,7 @@ Options:
 
 - `brace_style`: Style of braces. One of `_1TBS`, `Allman`, `Stroustrup`, `K_And_R`.
 
-- `multiline_call_style`: Style for calls containing a non-final multiline composite literal. `Block_Arguments` keeps preceding and consecutive scalar arguments packed when they fit, starts the argument after each multiline composite literal on a new line, indents composite contents relative to the call, and puts the closing parenthesis on its own line without a trailing call comma. Defaults to `Default`.
+- `multiline_call_style`: Style for calls containing a non-final multiline composite literal. `Block_Arguments` keeps preceding and consecutive scalar arguments packed when they fit, starts the argument after each multiline composite literal on a new line, indents composite contents relative to the call, and puts the closing parenthesis on its own line after a trailing call comma. Defaults to `Default`.
 
 - `indent_cases`: Indent case statements within a switch.
 
