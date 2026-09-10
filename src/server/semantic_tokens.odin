@@ -290,15 +290,17 @@ visit_node :: proc(node: ^ast.Node, builder: ^SemanticTokenBuilder) {
 		visit_node(n.cond, builder)
 		visit_node(n.body, builder)
 	case ^ast.Type_Switch_Stmt:
-		if tag, ok := n.tag.derived.(^ast.Assign_Stmt); ok {
-			for lhs in tag.lhs {
-				if ident, ok := unwrap_ident(lhs); ok {
-					write_semantic_node(builder, ident, .Variable, {.Declaration})
+		if n.tag != nil {
+			if tag, ok := n.tag.derived.(^ast.Assign_Stmt); ok {
+				for lhs in tag.lhs {
+					if ident, ok := unwrap_ident(lhs); ok {
+						write_semantic_node(builder, ident, .Variable, {.Declaration})
+					}
 				}
+				visit_nodes(tag.rhs, builder)
+			} else {
+				visit_node(n.tag, builder)
 			}
-			visit_nodes(tag.rhs, builder)
-		} else {
-			visit_node(n.tag, builder)
 		}
 		visit_node(n.expr, builder)
 		visit_node(n.body, builder)

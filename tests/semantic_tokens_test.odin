@@ -508,6 +508,24 @@ main :: proc(values: []int, value: any) {
 }
 
 @(test)
+semantic_tokens_incomplete_type_switch :: proc(t: ^testing.T) {
+	src := test.Source {
+		main = `package test
+main :: proc(value: any) {
+	switch in value {}
+}
+`,
+	}
+
+	test.expect_semantic_tokens(t, &src, {
+		{1, 0,  4, .Function,  {.ReadOnly, .Declaration}}, // [0] main
+		{0, 13, 5, .Parameter, {.Declaration}},            // [1] value
+		{0, 7,  3, .Type,      {.ReadOnly}},               // [2] any
+		{1, 11, 5, .Parameter, {}},                        // [3] value
+	})
+}
+
+@(test)
 semantic_tokens_alias_from_poly_struct :: proc(t: ^testing.T) {
 	src := test.Source {
 		main = `package test
