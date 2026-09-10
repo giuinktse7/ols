@@ -2768,7 +2768,7 @@ visit_block_argument_call_exprs :: proc(p: ^Printer, call_expr: ^ast.Call_Expr) 
 			}
 		} else {
 			comments, _ := visit_comments(p, call_expr.close)
-			section = cons(section, comments)
+			section = cons(section, text(","), comments)
 		}
 	}
 
