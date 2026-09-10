@@ -1478,6 +1478,78 @@ comp_lit_contains_blocks :: proc(p: ^Printer, comp_lit: ast.Comp_Lit) -> bool {
 }
 
 @(private)
+comp_lit_is_multiline :: proc(p: ^Printer, comp_lit: ^ast.Comp_Lit, called_from: Expr_Called_Type) -> bool {
+	if comp_lit.type != nil {
+		if matrix_type, ok := comp_lit.type.derived.(^ast.Matrix_Type); ok {
+			if is_matrix_type_constant(matrix_type) && is_matrix_filled_comp_lit(matrix_type, comp_lit) {
+				return true
+			}
+		}
+	}
+
+	should_newline := comp_lit_contains_fields(comp_lit^)
+	should_newline &=
+		(called_from == .Value_Decl ||
+			called_from == .Assignment_Stmt ||
+			(called_from == .Call_Expr && comp_lit_contains_blocks(p, comp_lit^)))
+	should_newline &= len(comp_lit.elems) != 0
+
+	should_newline |= contains_comments_in_range(p, comp_lit.pos, comp_lit.end)
+	should_newline |=
+		p.config.multiline_composite_literals && len(comp_lit.elems) > 0 && comp_lit.open.line != comp_lit.close.line
+
+	return should_newline
+}
+
+@(private)
+call_arg_is_multiline_comp_lit :: proc(p: ^Printer, expr: ^ast.Expr) -> bool {
+	comp_lit: ^ast.Comp_Lit
+	called_from := Expr_Called_Type.Call_Expr
+
+	#partial switch v in expr.derived {
+	case ^ast.Comp_Lit:
+		comp_lit = v
+	case ^ast.Field_Value:
+		if value, ok := v.value.derived.(^ast.Comp_Lit); ok {
+			comp_lit = value
+			called_from = .Generic
+		}
+	}
+
+	if comp_lit == nil {
+		return false
+	}
+	if comp_lit_is_multiline(p, comp_lit, called_from) {
+		return true
+	}
+
+	// If a one-line literal cannot fit after the call breaks to its normal
+	// continuation indentation, its own group will render across multiple lines.
+	if comp_lit.open.line == comp_lit.close.line {
+		available_width :=
+			p.config.character_width - (p.current_indentation + 1) * p.indentation_width
+		return expr.end.offset - expr.pos.offset >= available_width
+	}
+
+	return false
+}
+
+@(private)
+call_uses_block_argument_style :: proc(p: ^Printer, call_expr: ^ast.Call_Expr) -> bool {
+	if p.config.multiline_call_style != .Block_Arguments {
+		return false
+	}
+
+	for arg, i in call_expr.args {
+		if i != len(call_expr.args) - 1 && call_arg_is_multiline_comp_lit(p, arg) {
+			return true
+		}
+	}
+
+	return false
+}
+
+@(private)
 contains_comments_in_range :: proc(p: ^Printer, pos: tokenizer.Pos, end: tokenizer.Pos) -> bool {
 	for i := p.latest_comment_index; i < len(p.comments); i += 1 {
 		for c in p.comments[i].list {
@@ -1880,13 +1952,17 @@ visit_expr :: proc(
 			contains_do |= contains_do_in_expression(p, arg)
 		}
 
-		if is_call_expr_nestable(v.args) {
+		block_argument_style := call_uses_block_argument_style(p, v)
+
+		if block_argument_style {
+			document = cons(document, nest(cons(break_with(""), visit_block_argument_call_exprs(p, v))))
+		} else if is_call_expr_nestable(v.args) {
 			document = cons(document, nest(cons(break_with(""), visit_call_exprs(p, v))))
 		} else {
 			document = cons(document, nest_if_break(cons(break_with(""), visit_call_exprs(p, v)), "call_expr"))
 		}
 
-		document = cons(document, break_with(""), text(")"))
+		document = cons(document, block_argument_style ? newline(1) : break_with(""), text(")"))
 
 		//Binary expression are nested on operators, and therefore undo the nesting in the call expression.
 		if called_from == .Binary_Expr {
@@ -1966,17 +2042,8 @@ visit_expr :: proc(
 			}
 		}
 
-		should_newline := comp_lit_contains_fields(v^)
-
-		should_newline &=
-			(called_from == .Value_Decl ||
-				called_from == .Assignment_Stmt ||
-				(called_from == .Call_Expr && comp_lit_contains_blocks(p, v^)))
-		should_newline &= len(v.elems) != 0
-
-		should_newline |= contains_comments_in_range(p, v.pos, v.end)
-
-		should_newline |= p.config.multiline_composite_literals && len(v.elems) > 0 && v.open.line != v.close.line
+		should_newline := comp_lit_is_multiline(p, v, called_from)
+		should_newline |= .Enforce_Comp_Lit_Newline in options
 
 		if should_newline {
 			document = cons_with_nopl(document, visit_begin_brace(p, v.pos, .Comp_Lit))
@@ -2016,7 +2083,7 @@ visit_expr :: proc(
 	case ^ast.Field_Value:
 		document = cons_with_nopl(
 			visit_expr(p, v.field),
-			cons_with_nopl(text_position(p, "=", v.sep), visit_expr(p, v.value)),
+			cons_with_nopl(text_position(p, "=", v.sep), visit_expr(p, v.value, options = options)),
 		)
 	case ^ast.Type_Assertion:
 		document = visit_expr(p, v.expr)
@@ -2355,6 +2422,7 @@ List_Option :: enum u8 {
 	Add_Comma,
 	Trailing,
 	Enforce_Newline,
+	Enforce_Comp_Lit_Newline,
 	Group,
 	Glue,
 }
@@ -2669,6 +2737,42 @@ visit_call_exprs :: proc(p: ^Printer, call_expr: ^ast.Call_Expr) -> ^Document {
 
 	}
 	return document
+}
+
+@(private)
+visit_block_argument_call_exprs :: proc(p: ^Printer, call_expr: ^ast.Call_Expr) -> ^Document {
+	document := empty()
+	section := empty()
+	ellipsis := call_expr.ellipsis.kind == .Ellipsis
+
+	for expr, i in call_expr.args {
+		if call_expr.ellipsis.pos.offset <= expr.pos.offset && ellipsis {
+			section = cons(section, text(".."))
+			ellipsis = false
+		}
+
+		multiline_comp_lit := call_arg_is_multiline_comp_lit(p, expr)
+		expr_options := List_Options{.Enforce_Comp_Lit_Newline} if multiline_comp_lit else List_Options{}
+		section = cons(section, group(visit_expr(p, expr, .Call_Expr, expr_options)))
+
+		if i != len(call_expr.args) - 1 {
+			section = cons(section, text(","))
+			comments, _ := visit_comments(p, call_expr.args[i + 1].pos)
+			section = cons(section, comments)
+
+			if multiline_comp_lit {
+				document = cons(document, group(section), newline(1))
+				section = empty()
+			} else {
+				section = cons(section, break_with_space())
+			}
+		} else {
+			comments, _ := visit_comments(p, call_expr.close)
+			section = cons(section, comments)
+		}
+	}
+
+	return cons(document, group(section))
 }
 
 @(private)

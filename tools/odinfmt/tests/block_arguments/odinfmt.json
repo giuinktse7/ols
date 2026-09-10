@@ -1,0 +1,6 @@
+{
+	"character_width": 80,
+	"newline_style": "LF",
+	"multiline_composite_literals": true,
+	"multiline_call_style": "Block_Arguments"
+}
