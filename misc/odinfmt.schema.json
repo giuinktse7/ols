@@ -48,6 +48,12 @@
 			"enum": ["_1TBS", "Allman", "Stroustrup", "K_And_R"],
 			"default": "_1TBS"
 		},
+		"multiline_call_style": {
+			"type": "string",
+			"enum": ["Default", "Block_Arguments"],
+			"default": "Default",
+			"description": "Format calls containing a non-final multiline composite literal using block argument indentation and boundaries"
+		},
 		"indent_cases": {
 			"type": "boolean",
 			"default": false
