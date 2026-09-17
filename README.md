@@ -170,6 +170,17 @@ Packages containing `#+test` files are checked in both normal and test modes.
 
 Odinfmt reads configuration through `odinfmt.json`.
 
+Pass one or more files or directories to format them, using `-w` to write the
+results in place:
+
+```sh
+odinfmt -w src/main.odin src/ui.odin
+```
+
+Configuration is discovered separately for each input path. Use `-config:path/to/odinfmt.json`
+to apply the same configuration to all inputs. With `-stdin`, at most one path
+may be supplied for configuration discovery.
+
 Example:
 
 ```json

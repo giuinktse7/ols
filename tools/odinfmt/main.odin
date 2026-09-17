@@ -12,20 +12,14 @@ import "src:odin/format"
 import "src:odin/printer"
 
 Args :: struct {
-	write:  bool `args:"name=w" usage:"write the new format to file"`,
-	stdin:  bool `usage:"formats code from standard input"`,
-	path:   string `args:"pos=0" usage:"set the file or directory to format"`,
-	config: string `usage:"path to a config file"`,
+	write:    bool `args:"name=w" usage:"write the new format to file"`,
+	stdin:    bool `usage:"formats code from standard input"`,
+	path:     string `args:"pos=0" usage:"set the file or directory to format"`,
+	config:   string `usage:"path to a config file"`,
+	overflow: [dynamic]string `usage:"additional files or directories to format"`,
 }
 
-format_file :: proc(
-	filepath: string,
-	config: printer.Config,
-	allocator := context.allocator,
-) -> (
-	string,
-	bool,
-) {
+format_file :: proc(filepath: string, config: printer.Config, allocator := context.allocator) -> (string, bool) {
 	if data, err := os.read_entire_file(filepath, allocator); err == nil {
 		return format.format(filepath, string(data), config, {.Optional_Semicolons}, allocator)
 	} else {
@@ -44,6 +38,11 @@ main :: proc() {
 	args: Args
 	flags.parse_or_exit(&args, os.args)
 
+	if args.stdin && len(args.overflow) > 0 {
+		fmt.fprint(os.stderr, "Only one path may be specified with -stdin\n")
+		os.exit(1)
+	}
+
 	// only allow the path to not be specified when formatting from stdin
 	if args.path == "" {
 		if args.stdin {
@@ -61,96 +60,100 @@ main :: proc() {
 	write_failure := false
 
 	watermark: uint = 0
+	paths := make([dynamic]string)
+	append(&paths, args.path)
+	append(&paths, ..args.overflow[:])
 
-	config: printer.Config
-	if args.config == "" {
-		config = format.find_config_file_or_default(args.path)
-	} else {
-		config = format.read_config_file_from_path_or_default(args.config)
-	}
+	for path in paths {
+		defer free_all(arena_allocator)
 
-	if args.stdin {
-		data := make([dynamic]byte, arena_allocator)
-
-		for {
-			tmp: [mem.Kilobyte]byte
-
-			r, err := os.read(os.stdin, tmp[:])
-			if err != os.ERROR_NONE || r <= 0 do break
-
-			append(&data, ..tmp[:r])
-		}
-
-		source, ok := format.format(
-			"<stdin>",
-			string(data[:]),
-			config,
-			{.Optional_Semicolons},
-			arena_allocator,
-		)
-
-		if ok {
-			fmt.print(source)
-		}
-
-		write_failure = !ok
-	} else if os.is_file(args.path) {
-		if args.write {
-			if data, ok := format_file(args.path, config, arena_allocator); ok {
-				write_formatted_file(args.path, data)
-			} else {
-				fmt.eprintf("Failed to write %v", args.path)
-				write_failure = true
-			}
+		config: printer.Config
+		if args.config == "" {
+			config = format.find_config_file_or_default(path)
 		} else {
-			if data, ok := format_file(args.path, config, arena_allocator); ok {
-				fmt.print(data)
-			}
-		}
-	} else if os.is_dir(args.path) {
-		files: [dynamic]string
-		w := os.walker_create(args.path)
-		defer os.walker_destroy(&w)
-		for info in os.walker_walk(&w) {
-			if info.type == .Directory {
-				continue
-			}
-
-			if filepath.ext(info.name) != ".odin" {
-				continue
-			}
-
-			append(&files, strings.clone(info.fullpath))
+			config = format.read_config_file_from_path_or_default(args.config)
 		}
 
-		for file in files {
-			fmt.println(file)
+		if args.stdin {
+			data := make([dynamic]byte, arena_allocator)
 
-			if data, ok := format_file(file, config, arena_allocator); ok {
-				if args.write {
-					write_formatted_file(file, data)
+			for {
+				tmp: [mem.Kilobyte]byte
+
+				r, err := os.read(os.stdin, tmp[:])
+				if err != os.ERROR_NONE || r <= 0 do break
+
+				append(&data, ..tmp[:r])
+			}
+
+			source, ok := format.format("<stdin>", string(data[:]), config, {.Optional_Semicolons}, arena_allocator)
+
+			if ok {
+				fmt.print(source)
+			}
+
+			write_failure = !ok
+		} else if os.is_file(path) {
+			if args.write {
+				if data, ok := format_file(path, config, arena_allocator); ok {
+					write_formatted_file(path, data)
 				} else {
-					fmt.println(data)
+					fmt.eprintf("Failed to write %v", path)
+					write_failure = true
 				}
 			} else {
-				fmt.eprintf("Failed to format %v", file)
-				write_failure = true
+				if data, ok := format_file(path, config, arena_allocator); ok {
+					fmt.print(data)
+				} else {
+					write_failure = true
+				}
+			}
+		} else if os.is_dir(path) {
+			files: [dynamic]string
+			w := os.walker_create(path)
+			defer os.walker_destroy(&w)
+
+			for info in os.walker_walk(&w) {
+				if info.type == .Directory {
+					continue
+				}
+
+				if filepath.ext(info.name) != ".odin" {
+					continue
+				}
+
+				append(&files, strings.clone(info.fullpath))
 			}
 
-			watermark = max(watermark, arena.total_used)
+			for file in files {
+				fmt.println(file)
 
-			free_all(arena_allocator)
+				if data, ok := format_file(file, config, arena_allocator); ok {
+					if args.write {
+						write_formatted_file(file, data)
+					} else {
+						fmt.println(data)
+					}
+				} else {
+					fmt.eprintf("Failed to format %v", file)
+					write_failure = true
+				}
+
+				watermark = max(watermark, arena.total_used)
+
+				free_all(arena_allocator)
+			}
+
+			fmt.printf(
+				"Formatted %v files in %vms \n",
+				len(files),
+				time.duration_milliseconds(time.tick_lap_time(&tick_time)),
+			)
+			fmt.printf("Peak memory used: %v \n", watermark / mem.Megabyte)
+		} else {
+			fmt.eprintf("%v is neither a directory nor a file \n", path)
+			write_failure = true
 		}
-
-		fmt.printf(
-			"Formatted %v files in %vms \n",
-			len(files),
-			time.duration_milliseconds(time.tick_lap_time(&tick_time)),
-		)
-		fmt.printf("Peak memory used: %v \n", watermark / mem.Megabyte)
-	} else {
-		fmt.eprintf("%v is neither a directory nor a file \n", args.path)
-		os.exit(1)
 	}
 
 	os.exit(1 if write_failure else 0)
