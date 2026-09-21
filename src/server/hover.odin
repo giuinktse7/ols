@@ -1246,6 +1246,13 @@ get_hover_information :: proc(
 			}
 		}
 
+		// The resolved Objc_Block type does not record which parameters are captures.
+		// Keep the original call so hover can count them and display them in brackets.
+		initializer: ^ast.Expr
+		if local, ok := get_local(ast_context, ident); ok {
+			initializer = local.initializer
+		}
+
 		if resolved, ok := resolve_type_identifier(&ast_context, ident); ok {
 			if position_context.enum_type != nil {
 				if hover, ok := get_hover_enum_field(&ast_context, resolved, ident.name, config); ok {
@@ -1253,6 +1260,10 @@ get_hover_information :: proc(
 				}
 			}
 			construct_ident_symbol_info(&resolved, ident.name, ast_context.document_package)
+			if content, ok := get_objc_block_hover_content(&ast_context, resolved, initializer); ok {
+				hover.contents = content
+				return hover, true, true
+			}
 
 			build_documentation(&ast_context, &resolved, false)
 			hover.contents = write_hover_content(&ast_context, resolved, config)
