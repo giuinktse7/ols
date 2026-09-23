@@ -932,12 +932,16 @@ apply_poly_arguments :: proc(
 		return visitor
 	}
 
+	recursion_map := make(map[rawptr]struct{}, 64, context.temp_allocator)
+
 	for type, i in types {
+		clear_map(&recursion_map)
+
 		data := Visit_Data {
 			poly_map      = poly_map,
 			types         = types,
 			i             = i,
-			recursion_map = make(map[rawptr]struct{}, 0, context.temp_allocator),
+			recursion_map = recursion_map,
 		}
 
 		visitor := ast.Visitor {
