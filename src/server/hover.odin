@@ -729,11 +729,11 @@ get_struct_layout :: proc(
 }
 
 
-write_symbol_content :: proc(ast_context: ^AstContext, symbol: Symbol) -> MarkupContent {
+write_symbol_content :: proc(ast_context: ^AstContext, symbol: Symbol, allocator := context.temp_allocator) -> MarkupContent {
 	cat := construct_symbol_information(ast_context, symbol)
-	doc := construct_symbol_docs(symbol)
+	doc := construct_symbol_docs(symbol, allocator)
 
-	return build_markup_content(cat, doc)
+	return build_markup_content(cat, doc, allocator)
 }
 
 write_hover_content :: proc(ast_context: ^AstContext, symbol: Symbol, config: ^common.Config) -> MarkupContent {
