@@ -423,6 +423,7 @@ OlsConfig :: struct {
 	collections:                             [dynamic]OlsConfigCollection,
 	thread_pool_count:                       Maybe(int),
 	enable_format:                           Maybe(bool),
+	enable_completions:                      Maybe(bool),
 	enable_hover:                            Maybe(bool),
 	enable_hover_struct_size_info:           Maybe(bool),
 	enable_document_symbols:                 Maybe(bool),
