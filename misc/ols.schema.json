@@ -40,9 +40,9 @@
 			"type": "boolean",
 			"description": "Enables hover feature"
 		},
-		"enable_hover_struct_size_info": {
+		"enable_hover_layout": {
 			"type": "boolean",
-			"description": "Enables struct size and alignment information in hover.",
+			"description": "Show memory layout (size, alignment, field offsets) of types on hover.",
 			"default": false
 		},
 		"enable_procedure_context": { "type": "boolean" },

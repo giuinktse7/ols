@@ -377,7 +377,7 @@ ast_completion_in_comp_lit_type :: proc(t: ^testing.T) {
 		`,
 		packages = {},
 		config = {
-			enable_hover_struct_size_info = true,
+			enable_hover_layout = true,
 		},
 	}
 

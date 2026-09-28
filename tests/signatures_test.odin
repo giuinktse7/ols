@@ -608,7 +608,7 @@ signature_comp_lit_struct_docs_exclude_hover_layout :: proc(t: ^testing.T) {
 		config = {
 			enable_comp_lit_signature_help          = true,
 			enable_comp_lit_signature_help_use_docs = true,
-			enable_hover_struct_size_info            = true,
+			enable_hover_layout            = true,
 		}
 	}
 

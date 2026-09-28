@@ -639,6 +639,26 @@ expect_hover :: proc(t: ^testing.T, src: ^Source, expect_hover_string: string) {
 	}
 }
 
+expect_hover_contains :: proc(t: ^testing.T, src: ^Source, expect_substring: string) {
+	spall.trace(#procedure)
+
+	cursor := source_remove_cursor(src)
+
+	setup(src)
+	defer teardown(src)
+
+	hover, valid, ok := server.get_hover_information(src.document, cursor, &src.config)
+
+	if !ok || !valid {
+		log.error(t, "Failed get_hover_information")
+		return
+	}
+
+	if !strings.contains(hover.contents.value, expect_substring) {
+		log.errorf("Expected hover to contain:\n%q, but received:\n%q", expect_substring, hover.contents.value)
+	}
+}
+
 expect_definition_locations :: proc(t: ^testing.T, src: ^Source, expect_locations: []common.Location) {
 	spall.trace(#procedure)
 
