@@ -303,6 +303,7 @@ collect_enum_fields :: proc(
 	enum_type: ast.Enum_Type,
 	package_map: map[string]string,
 	file: ast.File,
+	uri: string,
 ) -> SymbolEnumValue {
 	spall.trace(#procedure)
 
@@ -330,6 +331,7 @@ collect_enum_fields :: proc(
 	value := SymbolEnumValue {
 		names     = names[:],
 		ranges    = ranges[:],
+		uri       = uri,
 		values    = values[:],
 		base_type = base_type,
 		comments  = comments[:],
@@ -1012,7 +1014,7 @@ collect_symbols :: proc(collection: ^SymbolCollection, file: ast.File, uri: stri
 		case ^ast.Enum_Type:
 			token = v^
 			token_type = .Enum
-			symbol.value = collect_enum_fields(collection, v^, package_map, file)
+			symbol.value = collect_enum_fields(collection, v^, package_map, file, uri_key)
 			symbol.signature = "enum"
 		case ^ast.Union_Type:
 			token = v^
