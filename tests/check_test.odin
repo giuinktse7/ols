@@ -46,3 +46,43 @@ checker_adds_test_build_mode_to_test_targets :: proc(t: ^testing.T) {
 	testing.expect_value(t, normal_has_test_mode, false)
 	testing.expect_value(t, test_has_test_mode, true)
 }
+
+@(test)
+checker_test_mode_preserves_workspace_and_overlay :: proc(t: ^testing.T) {
+	config := common.Config {
+		odin_command = "custom-odin",
+		checker_args = "-vet",
+	}
+	paths := []string{"first", "second"}
+	cmd := server.build_check_command(
+		paths[0],
+		{"-collection:example=example"},
+		&config,
+		true,
+		check_paths = paths,
+		overlay = "overlay.json",
+		semantics = "semantics.cbor",
+	)
+
+	testing.expect_value(t, cmd[0], "custom-odin")
+	testing.expect_value(t, cmd[1], "check")
+	testing.expect_value(t, cmd[2], "first")
+	testing.expect_value(t, cmd[3], "second")
+	for expected in ([]string{
+		"-collection:example=example",
+		"-no-entry-point",
+		"-json-errors",
+		"-workspace",
+		"-overlay:overlay.json",
+		"-export-semantics:cbor",
+		"-export-semantics-file:semantics.cbor",
+		"-build-mode:test",
+		"-vet",
+	}) {
+		found := false
+		for arg in cmd {
+			found ||= arg == expected
+		}
+		testing.expectf(t, found, "Missing checker argument %q", expected)
+	}
+}

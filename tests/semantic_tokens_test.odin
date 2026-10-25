@@ -568,15 +568,15 @@ Qux :: Baz
 	}
 
 	test.expect_semantic_tokens(t, &src, {
-		{1, 0,  3, .Struct,        {.ReadOnly}}, // [0] Foo
-		{0, 15, 1, .TypeParameter, {}},          // [1] A
-		{1, 0,  3, .Struct,        {.ReadOnly}}, // [2] Bar
-		{0, 7,  3, .Struct,        {.ReadOnly}}, // [3] Foo
-		{0, 4,  3, .Type,          {.ReadOnly}}, // [4] f32
-		{1, 0,  3, .Struct,        {.ReadOnly}}, // [5] Baz
-		{0, 7,  3, .Struct,        {.ReadOnly}}, // [6] Bar
-		{1, 0,  3, .Struct,        {.ReadOnly}}, // [7] Qux
-		{0, 7,  3, .Struct,        {.ReadOnly}}, // [8] Baz
+		{1, 0,  3, .Struct,        {.ReadOnly, .Declaration}}, // [0] Foo
+		{0, 15, 1, .TypeParameter, {.Declaration}},            // [1] A
+		{1, 0,  3, .Struct,        {.ReadOnly, .Declaration}}, // [2] Bar
+		{0, 7,  3, .Struct,        {.ReadOnly}},               // [3] Foo
+		{0, 4,  3, .Type,          {.ReadOnly}},               // [4] f32
+		{1, 0,  3, .Struct,        {.ReadOnly, .Declaration}}, // [5] Baz
+		{0, 7,  3, .Struct,        {.ReadOnly}},               // [6] Bar
+		{1, 0,  3, .Struct,        {.ReadOnly, .Declaration}}, // [7] Qux
+		{0, 7,  3, .Struct,        {.ReadOnly}},               // [8] Baz
 	})
 }
 
@@ -592,13 +592,13 @@ semantic_tokens_soa_pointer_fields :: proc(t: ^testing.T) {
 	}
 
 	test.expect_semantic_tokens(t, &src, {
-		{1,  2, 4, .Function, {.ReadOnly}}, // [0]  main
-		{1,  3, 3, .Variable, {}},          // [1]  foo
-		{0, 24, 3, .Property, {}},          // [2]  bar (decl)
-		{0,  5, 3, .Type,     {.ReadOnly}}, // [3]  int
-		{1,  3, 1, .Variable, {}},          // [4]  x
-		{0,  5, 3, .Variable, {}},          // [5]  foo
-		{0,  4, 3, .Property, {}},          // [6]  bar
+		{1,  2, 4, .Function, {.ReadOnly, .Declaration}}, // [0]  main
+		{1,  3, 3, .Variable, {.Declaration}},            // [1]  foo
+		{0, 24, 3, .Property, {.Declaration}},            // [2]  bar (decl)
+		{0,  5, 3, .Type,     {.ReadOnly}},               // [3]  int
+		{1,  3, 1, .Variable, {.Declaration}},            // [4]  x
+		{0,  5, 3, .Variable, {}},                        // [5]  foo
+		{0,  4, 3, .Property, {}},                        // [6]  bar
 	})
 }
 
@@ -610,8 +610,8 @@ INT :: distinct int
 `,
 	}
 	test.expect_semantic_tokens(t, &src, {
-		{1,  0, 3, .Type, {.ReadOnly}}, // [0] INT
-		{0, 16, 3, .Type, {.ReadOnly}}, // [1] int
+		{1,  0, 3, .Type, {.ReadOnly, .Declaration}}, // [0] INT
+		{0, 16, 3, .Type, {.ReadOnly}},               // [1] int
 	})
 }
 
@@ -625,11 +625,11 @@ bar :: proc () {}
 `,
 	}
 	test.expect_semantic_tokens(t, &src, {
-		{1,  0,  3, .Function, {.ReadOnly}}, // [0] foo
-		{1,  2,  7, .Property, {.ReadOnly}}, // [1] private
-		{0,  9, 13, .Property, {.ReadOnly}}, // [2] deferred_none
-		{0, 14,  3, .Function, {.ReadOnly}}, // [3] foo
-		{1,  0,  3, .Function, {.ReadOnly}}, // [4] bar
+		{1,  0,  3, .Function, {.ReadOnly, .Declaration}}, // [0] foo
+		{1,  2,  7, .Property, {.ReadOnly}},               // [1] private
+		{0,  9, 13, .Property, {.ReadOnly}},               // [2] deferred_none
+		{0, 14,  3, .Function, {.ReadOnly}},               // [3] foo
+		{1,  0,  3, .Function, {.ReadOnly, .Declaration}}, // [4] bar
 	})
 }
 
@@ -643,10 +643,10 @@ semantic_tokens_parameter_shadowing :: proc(t: ^testing.T) {
 `,
 	}
 	test.expect_semantic_tokens(t, &src, {
-		{1,  2, 3, .Function,  {.ReadOnly}}, // [0] foo
-		{0, 12, 1, .Parameter, {}},          // [1] a
-		{0,  3, 3, .Type,      {.ReadOnly}}, // [2] int
-		{1,  3, 1, .Variable,  {}},          // [3] a
-		{0,  5, 1, .Parameter, {}},          // [4] a
+		{1,  2, 3, .Function,  {.ReadOnly, .Declaration}}, // [0] foo
+		{0, 12, 1, .Parameter, {.Declaration}},            // [1] a
+		{0,  3, 3, .Type,      {.ReadOnly}},               // [2] int
+		{1,  3, 1, .Variable,  {.Declaration}},            // [3] a
+		{0,  5, 1, .Parameter, {}},                        // [4] a
 	})
 }
